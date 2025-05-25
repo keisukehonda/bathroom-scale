@@ -5,19 +5,12 @@ type Record = {
   weight: string;
 };
 
-const BASE_WEIGHT = 99.6;
+const BASE_WEIGHT = 60.0;
 
 function App() {
   const [records, setRecords] = useState<Record[]>([]);
   const [date, setDate] = useState("");
   const [weight, setWeight] = useState("");
-
-  // ✅ 初回ロード：Upstashから取得
-  useEffect(() => {
-    fetch("/api/load")
-      .then((res) => res.json())
-      .then((data) => setRecords(data));
-  }, []);
 
   // ✅ 差分表示
   const getDifference = (w: string) => {
@@ -28,23 +21,46 @@ function App() {
     return `${sign}${diff.toFixed(1)}kg`;
   };
 
-  // ✅ 記録を追加：UpstashへPOST → 再取得
+  // ✅ 初回ロード
+  useEffect(() => {
+    fetch("/api/load")
+      .then(async (res) => {
+        if (!res.ok) {
+          const msg = await res.text();
+          throw new Error(`API error: ${msg}`);
+        }
+        return res.json();
+      })
+      .then((data) => setRecords(data))
+      .catch((err) => {
+        console.error("load failed:", err.message);
+      });
+  }, []);
+
+  // ✅ 追加時
   const addRecord = async () => {
     if (!date || !weight) return;
-    await fetch("/api/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ date, weight }),
-    });
 
-    // 保存成功後、再取得
-    const res = await fetch("/api/load");
-    const data = await res.json();
-    setRecords(data);
+    try {
+      const res = await fetch("/api/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, weight }),
+      });
 
-    // フォームリセット
-    setDate("");
-    setWeight("");
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(`API error: ${msg}`);
+      }
+
+      const updated = await fetch("/api/load");
+      const data = await updated.json();
+      setRecords(data);
+      setDate("");
+      setWeight("");
+    } catch (err) {
+      console.error("save failed:", (err as Error).message);
+    }
   };
 
   return (
