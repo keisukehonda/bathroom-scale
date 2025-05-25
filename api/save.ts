@@ -6,12 +6,15 @@ const redis = new Redis({
 });
 
 export default async function handler(req: Request) {
-  const { date, weight } = await req.json();
+  try {
+    const { date, weight } = await req.json();
+    if (!date || !weight) {
+      return new Response("Missing data", { status: 400 });
+    }
 
-  if (!date || !weight) {
-    return new Response("Invalid data", { status: 400 });
+    await redis.set(date, weight);
+    return new Response("OK");
+  } catch (err) {
+    return new Response(`Error: ${(err as Error).message}`, { status: 500 });
   }
-
-  await redis.set(date, weight);
-  return new Response("OK");
 }

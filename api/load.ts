@@ -6,14 +6,20 @@ const redis = new Redis({
 });
 
 export default async function handler() {
-  const keys = await redis.keys("*");
-  const data = await Promise.all(
-    keys.map(async (key) => ({
-      date: key,
-      weight: await redis.get<string>(key),
-    }))
-  );
-  return new Response(JSON.stringify(data), {
-    headers: { "Content-Type": "application/json" },
-  });
+  try {
+    const keys = await redis.keys("*");
+
+    const data = await Promise.all(
+      keys.map(async (key) => ({
+        date: key,
+        weight: await redis.get<string>(key),
+      }))
+    );
+
+    return new Response(JSON.stringify(data), {
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return new Response(`Error: ${(err as Error).message}`, { status: 500 });
+  }
 }
