@@ -1,11 +1,10 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 type Record = {
   date: string;
   weight: string;
 };
 
-const STORAGE_KEY = "weight-records";
 const BASE_WEIGHT = 99.6;
 
 function App() {
@@ -13,34 +12,39 @@ function App() {
   const [date, setDate] = useState("");
   const [weight, setWeight] = useState("");
 
-  // 初回：localStorageから読み込み
+  // ✅ 初回ロード：Upstashから取得
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setRecords(JSON.parse(saved));
-    }
+    fetch("/api/load")
+      .then((res) => res.json())
+      .then((data) => setRecords(data));
   }, []);
 
-  // 変更時：localStorageへ保存
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-  }, [records]);
-
-  const addRecord = () => {
-    if (!date || !weight) return;
-    const newRecords = [...records, { date, weight }];
-    setRecords(newRecords);
-    setDate("");
-    setWeight("");
-  };
-
-  // 差分を計算する関数
+  // ✅ 差分表示
   const getDifference = (w: string) => {
     const num = parseFloat(w);
     if (isNaN(num)) return "±0.0kg";
     const diff = num - BASE_WEIGHT;
     const sign = diff >= 0 ? "+" : "";
     return `${sign}${diff.toFixed(1)}kg`;
+  };
+
+  // ✅ 記録を追加：UpstashへPOST → 再取得
+  const addRecord = async () => {
+    if (!date || !weight) return;
+    await fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, weight }),
+    });
+
+    // 保存成功後、再取得
+    const res = await fetch("/api/load");
+    const data = await res.json();
+    setRecords(data);
+
+    // フォームリセット
+    setDate("");
+    setWeight("");
   };
 
   return (
@@ -72,6 +76,7 @@ function App() {
           <tr>
             <th>日付</th>
             <th>体重 (kg)</th>
+            <th>差分</th>
           </tr>
         </thead>
         <tbody>
