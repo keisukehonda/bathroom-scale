@@ -5,7 +5,7 @@ type Record = {
   weight: string;
 };
 
-const BASE_WEIGHT = 60.0;
+const BASE_WEIGHT = 99.6;
 
 function App() {
   const [records, setRecords] = useState<Record[]>([]);
