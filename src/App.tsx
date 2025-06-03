@@ -6,13 +6,14 @@ type Record = {
 };
 
 const BASE_WEIGHT = 99.6;
+const ITEMS_PER_PAGE = 10;
 
 function App() {
   const [records, setRecords] = useState<Record[]>([]);
   const [date, setDate] = useState("");
   const [weight, setWeight] = useState("");
+  const [page, setPage] = useState(1);
 
-  // ✅ 差分表示
   const getDifference = (w: string) => {
     const num = parseFloat(w);
     if (isNaN(num)) return "±0.0kg";
@@ -21,47 +22,51 @@ function App() {
     return `${sign}${diff.toFixed(1)}kg`;
   };
 
-  // ✅ 初回ロード
+  const fetchRecords = async () => {
+    try {
+      const res = await fetch("/api/load");
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+
+      // ✅ 日付降順でソート
+      const sorted = data.sort((a: Record, b: Record) =>
+        b.date.localeCompare(a.date)
+      );
+      setRecords(sorted);
+    } catch (err) {
+      console.error("load failed:", (err as Error).message);
+    }
+  };
+
   useEffect(() => {
-    fetch("/api/load")
-      .then(async (res) => {
-        if (!res.ok) {
-          const msg = await res.text();
-          throw new Error(`API error: ${msg}`);
-        }
-        return res.json();
-      })
-      .then((data) => setRecords(data))
-      .catch((err) => {
-        console.error("load failed:", err.message);
-      });
+    fetchRecords();
   }, []);
 
-  // ✅ 追加時
   const addRecord = async () => {
     if (!date || !weight) return;
-
     try {
       const res = await fetch("/api/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date, weight }),
       });
+      if (!res.ok) throw new Error(await res.text());
 
-      if (!res.ok) {
-        const msg = await res.text();
-        throw new Error(`API error: ${msg}`);
-      }
-
-      const updated = await fetch("/api/load");
-      const data = await updated.json();
-      setRecords(data);
+      await fetchRecords();
       setDate("");
       setWeight("");
+      setPage(1); // ✅ 追加後は最新が見えるように1ページ目へ
     } catch (err) {
       console.error("save failed:", (err as Error).message);
     }
   };
+
+  // ✅ ページング処理
+  const totalPages = Math.ceil(records.length / ITEMS_PER_PAGE);
+  const pagedRecords = records.slice(
+    (page - 1) * ITEMS_PER_PAGE,
+    page * ITEMS_PER_PAGE
+  );
 
   return (
     <div style={{ padding: "20px" }}>
@@ -96,7 +101,7 @@ function App() {
           </tr>
         </thead>
         <tbody>
-          {records.map((r, i) => (
+          {pagedRecords.map((r, i) => (
             <tr key={i}>
               <td>{r.date}</td>
               <td>{r.weight}</td>
@@ -105,6 +110,22 @@ function App() {
           ))}
         </tbody>
       </table>
+
+      {/* ✅ ページ切り替え */}
+      {totalPages > 1 && (
+        <div style={{ marginTop: "10px" }}>
+          {Array.from({ length: totalPages }, (_, i) => (
+            <button
+              key={i}
+              onClick={() => setPage(i + 1)}
+              disabled={page === i + 1}
+              style={{ marginRight: "5px" }}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
