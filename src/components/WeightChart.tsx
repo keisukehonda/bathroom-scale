@@ -21,7 +21,7 @@ export default function WeightChart({ data }: { data: WeightEntry[] }) {
   )
 
   return (
-    <div className="w-full h-72 p-4">
+    <div style={{ width: "100%", height: 300 }}>
       <ResponsiveContainer>
         <LineChart data={sortedData}>
           <CartesianGrid strokeDasharray="3 3" />
