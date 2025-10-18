@@ -31,7 +31,7 @@ describe('PTRadar', () => {
   it('renders consistent radar chart options', () => {
     render(<PTRadar data={sampleData} />)
     const pre = screen.getByTestId('echarts-mock')
-    expect(pre).toBeInTheDocument()
+    expect(pre).toBeTruthy()
     const option = JSON.parse(pre.textContent ?? '{}')
 
     expect(option.radar.splitNumber).toBe(30)
