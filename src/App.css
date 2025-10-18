@@ -252,6 +252,47 @@
   font-weight: 500;
 }
 
+.pt-radar-section {
+  align-items: center;
+}
+
+.pt-radar-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 380px;
+}
+
+.pt-radar__skeleton {
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(56, 189, 248, 0.4), rgba(148, 163, 184, 0.2));
+  animation: radarPulse 1.6s ease-in-out infinite;
+}
+
+.pt-radar__error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+@keyframes radarPulse {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0.6;
+    transform: scale(0.98);
+  }
+}
+
 .pt-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));

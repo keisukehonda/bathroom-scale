@@ -10,4 +10,9 @@ export default defineConfig({
       'react-router-dom': resolve(__dirname, 'src/lib/router'),
     },
   },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './vitest.setup.ts',
+  },
 })

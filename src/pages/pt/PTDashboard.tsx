@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
+
+import PTRadar from '../../components/PTRadar'
+import type { RadarAxis } from '../../lib/pt/radar'
+import { getProfileRadarData } from '../../lib/pt/radar'
 
 type Tier = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
 
@@ -33,6 +37,15 @@ const MOVEMENTS: MovementMeta[] = [
   { name: 'Bridge', slug: 'bridge' },
   { name: 'Handstand Pushup', slug: 'handstand-pushup', requires: 'wall' },
 ]
+
+const RADAR_TO_ROUTE: Record<RadarAxis['movementSlug'], MovementMeta['slug']> = {
+  pushup: 'pushup',
+  squat: 'squat',
+  pullup: 'pullup',
+  legraise: 'leg-raise',
+  bridge: 'bridge',
+  hspu: 'handstand-pushup',
+}
 
 const DEFAULT_STATE: PTProgressResponse = {
   equipment: {
@@ -105,6 +118,11 @@ function PTDashboard() {
   const [state, setState] = useState<PTProgressResponse>(DEFAULT_STATE)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [radarData, setRadarData] = useState<RadarAxis[] | null>(null)
+  const [radarLoading, setRadarLoading] = useState(true)
+  const [radarError, setRadarError] = useState<string | null>(null)
+
+  const navigate = useNavigate()
 
   const loadState = async () => {
     setLoading(true)
@@ -124,6 +142,23 @@ function PTDashboard() {
   useEffect(() => {
     loadState()
   }, [])
+
+  const loadRadar = useCallback(async () => {
+    setRadarLoading(true)
+    setRadarError(null)
+    try {
+      const data = await getProfileRadarData('demo-user', new Date().toISOString().slice(0, 10))
+      setRadarData(data)
+    } catch (error) {
+      setRadarError((error as Error).message)
+    } finally {
+      setRadarLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadRadar()
+  }, [loadRadar])
 
   const updateEquipment = async (key: 'hasPullupBar' | 'hasWallSpace', value: boolean) => {
     let equipmentSnapshot = state.equipment
@@ -165,6 +200,32 @@ function PTDashboard() {
     [state],
   )
 
+  const radarDisplayData = useMemo(() => {
+    if (!radarData) return []
+    return radarData.map((axis) => {
+      const routeSlug = RADAR_TO_ROUTE[axis.movementSlug]
+      if (!routeSlug) return axis
+      const availability = availabilityMap[routeSlug]
+      if (availability && !availability.available) {
+        return {
+          ...axis,
+          locked: true,
+          lockReason: availability.reason ?? axis.lockReason,
+        }
+      }
+      return axis
+    })
+  }, [availabilityMap, radarData])
+
+  const handleAxisClick = useCallback(
+    (slug: RadarAxis['movementSlug']) => {
+      const routeSlug = RADAR_TO_ROUTE[slug]
+      if (!routeSlug) return
+      navigate(`/pt/movement/${routeSlug}`)
+    },
+    [navigate],
+  )
+
   return (
     <div className="card">
       <section className="section">
@@ -172,6 +233,30 @@ function PTDashboard() {
           <h2>PTダッシュボード</h2>
           <p className="section__hint">解放済みのムーブメントを確認し、詳細画面から記録します。</p>
         </header>
+      </section>
+
+      <section className="section pt-radar-section">
+        <header className="section__header">
+          <h3>到達度レーダー</h3>
+          <p className="section__hint">現在の6種目の進捗をRPGスキルツリー風に表示します。</p>
+        </header>
+        <div className="pt-radar-wrapper">
+          {radarLoading ? (
+            <div className="pt-radar__skeleton" aria-label="loading" />
+          ) : radarError ? (
+            <div className="pt-radar__error">
+              <p className="section__hint">レーダーデータの読込に失敗しました。</p>
+              <button type="button" className="secondary-button" onClick={loadRadar}>
+                再試行する
+              </button>
+            </div>
+          ) : (
+            <PTRadar data={radarDisplayData} onAxisClick={handleAxisClick} />
+          )}
+        </div>
+      </section>
+
+      <section className="section">
         <div className="equipment-toggle">
           <label>
             <input
