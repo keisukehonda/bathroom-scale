@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
+import {
+  DEFAULT_GENERATION_CONFIG,
+  DEFAULT_USER_ID,
+  type PTGenerationConfig,
+  loadGenerationConfig,
+  saveGenerationConfig,
+} from '../../lib/pt/dailyPlan'
+
 type PTProgressResponse = {
   equipment: {
     hasPullupBar: boolean
@@ -32,6 +40,7 @@ function PTSettings() {
   const [settings, setSettings] = useState<SettingsPayload>(DEFAULT_STATE)
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
+  const [generationConfig, setGenerationConfig] = useState<PTGenerationConfig>(DEFAULT_GENERATION_CONFIG)
 
   useEffect(() => {
     const load = async () => {
@@ -47,15 +56,21 @@ function PTSettings() {
       } catch (error) {
         console.warn('settings load failed:', (error as Error).message)
       }
+      setGenerationConfig(loadGenerationConfig(DEFAULT_USER_ID))
     }
 
     load()
   }, [])
 
+  const updateGenerationConfig = (patch: Partial<PTGenerationConfig>) => {
+    setGenerationConfig((prev) => ({ ...prev, ...patch }))
+  }
+
   const handleSave = async () => {
     setSaving(true)
     setStatusMessage('')
     try {
+      saveGenerationConfig(DEFAULT_USER_ID, generationConfig)
       const res = await fetch('/api/pt/settings/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -148,6 +163,70 @@ function PTSettings() {
               <strong>常時解放</strong>
               <p className="section__hint">前提条件なしで常に選択可能。</p>
             </div>
+          </label>
+        </div>
+      </section>
+
+      <section className="section">
+        <header className="section__header">
+          <h3>デイリー生成</h3>
+          <p className="section__hint">当日のメニュー候補のルールを調整します。</p>
+        </header>
+
+        <div className="form-grid">
+          <label className="form-field">
+            <span className="form-field__label">最大種目数（1〜6）</span>
+            <input
+              type="range"
+              min={1}
+              max={6}
+              value={generationConfig.daily_max_movements}
+              onChange={(event) =>
+                updateGenerationConfig({ daily_max_movements: Number.parseInt(event.target.value, 10) })
+              }
+            />
+            <span className="section__hint">本日は最大 {generationConfig.daily_max_movements} 種目を提示</span>
+          </label>
+
+          <label className="form-field form-field--checkbox">
+            <input
+              type="checkbox"
+              checked={generationConfig.allow_same_category_twice}
+              onChange={(event) => updateGenerationConfig({ allow_same_category_twice: event.target.checked })}
+            />
+            <span>同系統の重複を許可</span>
+          </label>
+
+          <label className="form-field form-field--checkbox">
+            <input
+              type="checkbox"
+              checked={generationConfig.prefer_undertrained}
+              onChange={(event) => updateGenerationConfig({ prefer_undertrained: event.target.checked })}
+            />
+            <span>不足部位を優先</span>
+          </label>
+
+          <label className="form-field">
+            <span className="form-field__label">直近回避日数</span>
+            <input
+              type="number"
+              min={0}
+              max={14}
+              value={generationConfig.prefer_rotation_days}
+              onChange={(event) =>
+                updateGenerationConfig({ prefer_rotation_days: Number.parseInt(event.target.value, 10) || 0 })
+              }
+            />
+            <span className="section__hint">直近 {generationConfig.prefer_rotation_days} 日以内の種目を控えめに提案</span>
+          </label>
+
+          <label className="form-field form-field--checkbox">
+            <input
+              type="checkbox"
+              checked={generationConfig.include_locked_as_suggestions}
+              onChange={(event) => updateGenerationConfig({ include_locked_as_suggestions: event.target.checked })}
+            />
+            <span>ロック中の候補も表示</span>
           </label>
         </div>
       </section>
