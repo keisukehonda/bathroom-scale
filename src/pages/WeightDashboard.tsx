@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import DailyPlanCard from '../components/DailyPlanCard'
 import WeightChart from '../components/WeightChart'
 
 type Record = {
@@ -82,6 +83,8 @@ function WeightDashboard() {
 
   return (
     <div className="card">
+      <DailyPlanCard />
+
       <section className="section">
         <header className="section__header">
           <h2>体重グラフ</h2>
