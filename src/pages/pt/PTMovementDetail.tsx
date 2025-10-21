@@ -1,21 +1,28 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 
+import { toScore } from '../../lib/pt/radar'
+
 type Tier = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
 
-type MovementProgress = {
-  step: number
+type StoredMovementProgress = {
+  slug: 'pushup' | 'squat' | 'pullup' | 'legraise' | 'bridge' | 'hspu'
+  stepNo: number
   tier: Tier
+  score?: number
+  updatedAt: string
 }
 
-type PTProgressResponse = {
-  equipment: {
-    hasPullupBar: boolean
-    hasWallSpace: boolean
-  }
-  progress: Record<string, MovementProgress>
-  rules: {
-    bridgeDependsOn: 'any-step5' | 'none'
+type ProgressPayload = {
+  movements: StoredMovementProgress[]
+  version: number
+}
+
+type PTLoadResponse = {
+  profile: { displayName: string; updatedAt: string }
+  progress: {
+    movements: StoredMovementProgress[]
+    version?: number
   }
 }
 
@@ -35,6 +42,15 @@ const MOVEMENT_LABELS: Record<string, string> = {
   'handstand-pushup': 'Handstand Pushup',
 }
 
+const ROUTE_TO_PROGRESS_SLUG: Record<string, StoredMovementProgress['slug']> = {
+  pushup: 'pushup',
+  squat: 'squat',
+  'leg-raise': 'legraise',
+  pullup: 'pullup',
+  bridge: 'bridge',
+  'handstand-pushup': 'hspu',
+}
+
 const TIER_LABEL: Record<Tier, string> = {
   BEGINNER: '初級',
   INTERMEDIATE: '中級',
@@ -47,8 +63,10 @@ function PTMovementDetail() {
   const params = useParams()
   const slug = params.slug ?? ''
   const navigate = useNavigate()
+  const progressSlug = ROUTE_TO_PROGRESS_SLUG[slug]
 
-  const [progress, setProgress] = useState<MovementProgress>({ step: 1, tier: 'BEGINNER' })
+  const [progress, setProgress] = useState<{ stepNo: number; tier: Tier }>({ stepNo: 1, tier: 'BEGINNER' })
+  const [progressPayload, setProgressPayload] = useState<ProgressPayload>({ movements: [], version: 1 })
   const [sets, setSets] = useState<SetRow[]>([{ reps: 0 }])
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
@@ -58,25 +76,30 @@ function PTMovementDetail() {
       try {
         const res = await fetch('/api/pt/load')
         if (!res.ok) throw new Error(await res.text())
-        const data = (await res.json()) as PTProgressResponse
-        const current = data.progress[slug]
+        const data = (await res.json()) as PTLoadResponse
+        const version = data.progress?.version ?? 1
+        const movements = data.progress?.movements ?? []
+        const current = progressSlug
+          ? movements.find((movement) => movement.slug === progressSlug)
+          : undefined
         if (!current) {
           navigate('/pt')
           return
         }
-        setProgress(current)
+        setProgress({ stepNo: current.stepNo, tier: current.tier })
+        setProgressPayload({ movements, version })
       } catch (error) {
         console.warn('pt detail load failed:', (error as Error).message)
       }
     }
 
-    if (!slug || !MOVEMENT_LABELS[slug]) {
+    if (!slug || !MOVEMENT_LABELS[slug] || !progressSlug) {
       navigate('/pt')
       return
     }
 
     load()
-  }, [navigate, slug])
+  }, [navigate, progressSlug, slug])
 
   const updateSet = (index: number, field: keyof SetRow, value: number | boolean | undefined | string) => {
     setSets((prev) =>
@@ -100,6 +123,11 @@ function PTMovementDetail() {
   }
 
   const saveSession = async () => {
+    if (!progressSlug) {
+      setStatusMessage('対象のムーブメントが見つかりませんでした')
+      return
+    }
+
     setSaving(true)
     setStatusMessage('')
     try {
@@ -107,13 +135,37 @@ function PTMovementDetail() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          movementSlug: slug,
-          step: progress.step,
-          tier: progress.tier,
-          sets,
+          progress: {
+            version: progressPayload.version,
+            movements: progressPayload.movements.map((movement) =>
+              movement.slug === progressSlug
+                ? {
+                    ...movement,
+                    stepNo: progress.stepNo,
+                    tier: progress.tier,
+                    score: toScore(progress.stepNo, progress.tier),
+                    updatedAt: new Date().toISOString(),
+                  }
+                : movement,
+            ),
+          },
         }),
       })
       if (!res.ok) throw new Error(await res.text())
+      setProgressPayload((prev) => ({
+        version: prev.version,
+        movements: prev.movements.map((movement) =>
+          movement.slug === progressSlug
+            ? {
+                ...movement,
+                stepNo: progress.stepNo,
+                tier: progress.tier,
+                score: toScore(progress.stepNo, progress.tier),
+                updatedAt: new Date().toISOString(),
+              }
+            : movement,
+        ),
+      }))
       setStatusMessage('保存しました')
     } catch (error) {
       const message = (error as Error).message
@@ -146,9 +198,9 @@ function PTMovementDetail() {
               type="number"
               min={1}
               max={10}
-              value={progress.step}
+              value={progress.stepNo}
               onChange={(event) =>
-                setProgress((prev) => ({ ...prev, step: Number(event.target.value) }))
+                setProgress((prev) => ({ ...prev, stepNo: Number(event.target.value) }))
               }
             />
           </label>

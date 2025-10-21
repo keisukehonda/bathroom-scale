@@ -9,15 +9,14 @@ import {
   saveGenerationConfig,
 } from '../../lib/pt/dailyPlan'
 
-type PTProgressResponse = {
-  equipment: {
-    hasPullupBar: boolean
-    hasWallSpace: boolean
+type PTLoadResponse = {
+  profile: { displayName: string; updatedAt: string }
+  progress: {
+    movements: { slug: string; stepNo: number; tier: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'; score?: number; updatedAt: string }[]
+    version?: number
   }
-  progress: Record<string, { step: number; tier: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' }>
-  rules: {
-    bridgeDependsOn: 'any-step5' | 'none'
-  }
+  equipment?: { hasPullupBar: boolean; hasWallSpace: boolean }
+  rules?: { bridgeDependsOn: 'any-step5' | 'none' }
 }
 
 type SettingsPayload = {
@@ -47,11 +46,11 @@ function PTSettings() {
       try {
         const res = await fetch('/api/pt/load')
         if (!res.ok) throw new Error(await res.text())
-        const data = (await res.json()) as PTProgressResponse
+        const data = (await res.json()) as PTLoadResponse
         setSettings({
-          hasPullupBar: data.equipment.hasPullupBar,
-          hasWallSpace: data.equipment.hasWallSpace,
-          rules: data.rules,
+          hasPullupBar: data.equipment?.hasPullupBar ?? DEFAULT_STATE.hasPullupBar,
+          hasWallSpace: data.equipment?.hasWallSpace ?? DEFAULT_STATE.hasWallSpace,
+          rules: data.rules ?? DEFAULT_STATE.rules,
         })
       } catch (error) {
         console.warn('settings load failed:', (error as Error).message)
