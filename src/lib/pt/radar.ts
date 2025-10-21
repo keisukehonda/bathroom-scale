@@ -4,6 +4,7 @@ export type RadarAxis = {
   movementSlug: 'pushup' | 'squat' | 'pullup' | 'legraise' | 'bridge' | 'hspu'
   stepNo: number
   tier: RadarTier
+  score?: number
   recentMedianReps?: number
   requiredReps?: number
   locked: boolean
@@ -40,17 +41,11 @@ export function prepareRadarAxes(data: RadarAxis[]): PreparedRadarAxis[] {
         score: 0,
       } as PreparedRadarAxis
     }
-    const score = axis.locked ? 0 : toScore(axis.stepNo, axis.tier)
+    const baseScore = typeof axis.score === 'number' ? axis.score : toScore(axis.stepNo, axis.tier)
+    const clamped = Math.max(0, Math.min(10, Number.isFinite(baseScore) ? baseScore : 0))
+    const score = axis.locked ? 0 : clamped
     return { ...axis, score }
   })
 }
 
-export async function getProfileRadarData(userId: string, today: string): Promise<RadarAxis[]> {
-  const params = new URLSearchParams({ userId, today })
-  const response = await fetch(`/api/pt/radar?${params.toString()}`)
-  if (!response.ok) {
-    throw new Error(`Failed to load radar data: ${response.statusText}`)
-  }
-  const payload = (await response.json()) as RadarAxis[]
-  return payload
-}
+
