@@ -23,11 +23,11 @@ export type MovementProgress = {
 
 export const ProgressSchema = z.object({
   movements: z.array(MovementProgress).length(6),
-  version: z.number().int().optional(),
+  version: z.number().int(),
 })
 export type Progress = {
   movements: MovementProgress[]
-  version?: number
+  version: number
 }
 
 export const ProfileSchema = z.object({
@@ -46,6 +46,18 @@ export const SavePayloadSchema = z.object({
 export type SavePayload = {
   profile?: Profile
   progress?: Progress
+}
+
+export type PTLoadResponse = {
+  profile: Profile
+  progress: Progress
+}
+
+export type PTSaveResponse = {
+  ok: boolean
+  profile?: Profile
+  progress?: Progress
+  error?: string
 }
 
 export const MOVEMENT_SLUGS: MovementSlug[] = ['pushup', 'squat', 'pullup', 'legraise', 'bridge', 'hspu']
@@ -91,7 +103,7 @@ export const normaliseProgress = (input: Progress): Progress => {
   })
   return {
     movements,
-    version: input.version ?? 1,
+    version: Number.isInteger(input.version) ? input.version : 1,
   }
 }
 

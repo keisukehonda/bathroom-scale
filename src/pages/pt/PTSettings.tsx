@@ -8,15 +8,14 @@ import {
   loadGenerationConfig,
   saveGenerationConfig,
 } from '../../lib/pt/dailyPlan'
+import {
+  makeDefaultProfile,
+  type Profile,
+  type PTLoadResponse,
+  type PTSaveResponse,
+} from '../../../lib/schemas/pt'
 
-type Profile = { displayName: string; updatedAt: string }
-
-type PTLoadResponse = {
-  profile: Profile
-  progress: {
-    movements: { slug: string; stepNo: number; tier: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'; score?: number; updatedAt: string }[]
-    version?: number
-  }
+type PTLoadSettingsResponse = PTLoadResponse & {
   equipment?: { hasPullupBar: boolean; hasWallSpace: boolean }
   rules?: { bridgeDependsOn: 'any-step5' | 'none' }
 }
@@ -37,18 +36,13 @@ const DEFAULT_STATE: SettingsPayload = {
   },
 }
 
-const createDefaultProfile = (): Profile => ({
-  displayName: 'Guest',
-  updatedAt: new Date().toISOString(),
-})
-
 function PTSettings() {
   const [settings, setSettings] = useState<SettingsPayload>(DEFAULT_STATE)
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [generationConfig, setGenerationConfig] = useState<PTGenerationConfig>(DEFAULT_GENERATION_CONFIG)
-  const [profile, setProfile] = useState<Profile>(() => createDefaultProfile())
-  const [displayNameDraft, setDisplayNameDraft] = useState<string>(() => createDefaultProfile().displayName)
+  const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
+  const [displayNameDraft, setDisplayNameDraft] = useState<string>(() => makeDefaultProfile().displayName)
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
 
@@ -57,8 +51,8 @@ function PTSettings() {
       try {
         const res = await fetch('/api/pt/load')
         if (!res.ok) throw new Error(await res.text())
-        const data = (await res.json()) as PTLoadResponse
-        const loadedProfile = data.profile ?? createDefaultProfile()
+        const data = (await res.json()) as PTLoadSettingsResponse
+        const loadedProfile = data.profile ?? makeDefaultProfile()
         setProfile(loadedProfile)
         setDisplayNameDraft(loadedProfile.displayName)
         setProfileMessage('')
@@ -69,7 +63,7 @@ function PTSettings() {
         })
       } catch (error) {
         console.warn('settings load failed:', (error as Error).message)
-        const fallbackProfile = createDefaultProfile()
+        const fallbackProfile = makeDefaultProfile()
         setProfile(fallbackProfile)
         setDisplayNameDraft(fallbackProfile.displayName)
         setProfileMessage('')
@@ -89,23 +83,28 @@ function PTSettings() {
 
     setProfileSaving(true)
     setProfileMessage('')
-    const payload: Profile = {
-      displayName: trimmed,
-      updatedAt: new Date().toISOString(),
-    }
-
     try {
       const response = await fetch('/api/pt/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: payload }),
+        body: JSON.stringify({
+          profile: {
+            displayName: trimmed,
+            updatedAt: new Date().toISOString(),
+          },
+        }),
       })
       if (!response.ok) {
         throw new Error(await response.text())
       }
-      setProfile(payload)
-      setDisplayNameDraft(payload.displayName)
-      setProfileMessage('表示名を保存しました')
+      const data = (await response.json()) as PTSaveResponse
+      if (data.ok && data.profile) {
+        setProfile(data.profile)
+        setDisplayNameDraft(data.profile.displayName)
+        setProfileMessage('表示名を保存しました')
+      } else {
+        throw new Error(data.error ?? 'unknown error')
+      }
     } catch (error) {
       const message = (error as Error).message
       setProfileMessage(`表示名の保存に失敗しました: ${message}`)

@@ -16,6 +16,7 @@ import {
 } from '../lib/pt/dailyPlan'
 import type { RadarAxis } from '../lib/pt/radar'
 import { toScore } from '../lib/pt/radar'
+import { makeDefaultProgress, normaliseProgress, type MovementProgress, type PTLoadResponse } from '../../lib/schemas/pt'
 
 const TIER_DISPLAY: Record<string, string> = {
   BEGINNER: 'Beginner',
@@ -29,20 +30,9 @@ const TAG_DISPLAY: Record<string, string> = {
   rotation: 'ローテ重視',
 }
 
-type StoredMovementProgress = {
-  slug: RadarAxis['movementSlug']
-  stepNo: number
-  tier: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
-  score?: number
-  updatedAt: string
-}
+type StoredMovementProgress = MovementProgress
 
-type PTLoadResponse = {
-  profile: { displayName: string; updatedAt: string }
-  progress: {
-    movements: StoredMovementProgress[]
-    version?: number
-  }
+type PTLoadPlanResponse = PTLoadResponse & {
   // equipment and rules remain managed separately via settings API
   equipment?: { hasPullupBar: boolean; hasWallSpace: boolean }
   rules?: { bridgeDependsOn: 'any-step5' | 'none' }
@@ -114,9 +104,10 @@ export default function DailyPlanCard({ userId = DEFAULT_USER_ID }: { userId?: s
       if (!response.ok) {
         throw new Error(await response.text())
       }
-      const data = (await response.json()) as PTLoadResponse
+      const data = (await response.json()) as PTLoadPlanResponse
 
-      const progressMovements = data.progress?.movements ?? []
+      const progressPayload = data.progress ? normaliseProgress(data.progress) : makeDefaultProgress()
+      const progressMovements = progressPayload.movements
       const radarScores = buildRadarScores(progressMovements)
 
       const context: LoadedContext = {
