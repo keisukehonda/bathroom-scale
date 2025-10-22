@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 
 import PTRadar from '../../components/PTRadar'
@@ -172,6 +172,7 @@ function PTDashboard() {
 
   const loadState = async () => {
     setLoading(true)
+    setProfileError(null)
     try {
       const res = await fetch('/api/pt/load')
       if (!res.ok) throw new Error(await res.text())
