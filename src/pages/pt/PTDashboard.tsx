@@ -169,6 +169,8 @@ function PTDashboard() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  const displayName = useMemo(() => safeDisplayName(profile), [profile])
+
   const navigate = useNavigate()
 
   useEffect(() => {
