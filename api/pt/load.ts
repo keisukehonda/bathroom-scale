@@ -31,6 +31,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
+  if (!redis.isEnabled && process.env.NODE_ENV === 'production') {
+    res.status(500).json({ error: 'Redis configuration is missing' })
+    return
+  }
+
   const userId = resolveUserId(req)
   const profileKey = `pt:user:${userId}:profile`
   const progressKey = `pt:user:${userId}:progress`
