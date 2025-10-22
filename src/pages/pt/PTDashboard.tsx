@@ -3,21 +3,26 @@ import { NavLink, useNavigate } from 'react-router-dom'
 
 import PTRadar from '../../components/PTRadar'
 import type { RadarAxis } from '../../lib/pt/radar'
-import { getProfileRadarData } from '../../lib/pt/radar'
+import {
+  makeDefaultProfile,
+  makeDefaultProgress,
+  normaliseProgress,
+  type MovementProgress,
+  type Profile,
+  type Progress as ProgressPayload,
+  type Tier,
+} from '../../../lib/schemas/pt'
 
-type Tier = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
-
-type MovementProgress = {
-  step: number
-  tier: Tier
+type PTLoadResponse = {
+  profile?: Profile
+  progress?: ProgressPayload
 }
 
-type PTProgressResponse = {
+type PTSettings = {
   equipment: {
     hasPullupBar: boolean
     hasWallSpace: boolean
   }
-  progress: Record<string, MovementProgress>
   rules: {
     bridgeDependsOn: 'any-step5' | 'none'
   }
@@ -26,16 +31,17 @@ type PTProgressResponse = {
 type MovementMeta = {
   name: string
   slug: string
+  progressSlug: RadarAxis['movementSlug']
   requires?: 'bar' | 'wall'
 }
 
 const MOVEMENTS: MovementMeta[] = [
-  { name: 'Pushup', slug: 'pushup' },
-  { name: 'Squat', slug: 'squat' },
-  { name: 'Leg Raise', slug: 'leg-raise' },
-  { name: 'Pullup', slug: 'pullup', requires: 'bar' },
-  { name: 'Bridge', slug: 'bridge' },
-  { name: 'Handstand Pushup', slug: 'handstand-pushup', requires: 'wall' },
+  { name: 'Pushup', slug: 'pushup', progressSlug: 'pushup' },
+  { name: 'Squat', slug: 'squat', progressSlug: 'squat' },
+  { name: 'Leg Raise', slug: 'leg-raise', progressSlug: 'legraise' },
+  { name: 'Pullup', slug: 'pullup', progressSlug: 'pullup', requires: 'bar' },
+  { name: 'Bridge', slug: 'bridge', progressSlug: 'bridge' },
+  { name: 'Handstand Pushup', slug: 'handstand-pushup', progressSlug: 'hspu', requires: 'wall' },
 ]
 
 const RADAR_TO_ROUTE: Record<RadarAxis['movementSlug'], MovementMeta['slug']> = {
@@ -47,18 +53,58 @@ const RADAR_TO_ROUTE: Record<RadarAxis['movementSlug'], MovementMeta['slug']> = 
   hspu: 'handstand-pushup',
 }
 
-const DEFAULT_STATE: PTProgressResponse = {
+const DEFAULT_SETTINGS: PTSettings = {
   equipment: {
     hasPullupBar: false,
     hasWallSpace: false,
   },
-  progress: MOVEMENTS.reduce<Record<string, MovementProgress>>((acc, movement) => {
-    acc[movement.slug] = { step: 1, tier: 'BEGINNER' }
-    return acc
-  }, {}),
   rules: {
     bridgeDependsOn: 'any-step5',
   },
+}
+
+type ProgressState = {
+  movements: MovementProgress[]
+  version: number
+}
+
+const createDefaultProgressState = (): ProgressState => {
+  const base: ProgressPayload = makeDefaultProgress()
+  const movements = MOVEMENTS.map((movement) => {
+    const entry = base.movements.find((item: MovementProgress) => item.slug === movement.progressSlug)
+    if (entry) return entry
+    return {
+      slug: movement.progressSlug,
+      stepNo: 1,
+      tier: 'BEGINNER',
+      score: 0,
+      updatedAt: new Date().toISOString(),
+    } satisfies MovementProgress
+  })
+  return {
+    movements,
+    version: base.version ?? 1,
+  }
+}
+
+const buildProgressState = (payload: ProgressPayload | null | undefined): ProgressState => {
+  if (!payload) return createDefaultProgressState()
+  const normalised: ProgressPayload = normaliseProgress(payload)
+  const movements = MOVEMENTS.map((movement) => {
+    const entry = normalised.movements.find((item: MovementProgress) => item.slug === movement.progressSlug)
+    if (entry) return entry
+    return {
+      slug: movement.progressSlug,
+      stepNo: 1,
+      tier: 'BEGINNER',
+      score: 0,
+      updatedAt: new Date().toISOString(),
+    } satisfies MovementProgress
+  })
+  return {
+    movements,
+    version: normalised.version ?? 1,
+  }
 }
 
 const TIER_LABEL: Record<Tier, string> = {
@@ -73,19 +119,20 @@ type Availability = {
 }
 
 const checkBridgeUnlocked = (
-  progress: Record<string, MovementProgress>,
-  rule: PTProgressResponse['rules']['bridgeDependsOn'],
+  progress: Record<string, MovementProgress | undefined>,
+  rule: PTSettings['rules']['bridgeDependsOn'],
 ) => {
   if (rule === 'none') return true
   const required = ['pushup', 'squat', 'leg-raise']
-  return required.some((slug) => (progress[slug]?.step ?? 0) >= 5)
+  return required.some((slug) => (progress[slug]?.stepNo ?? 0) >= 5)
 }
 
 const getAvailability = (
   movement: MovementMeta,
-  state: PTProgressResponse,
+  settings: PTSettings,
+  progress: Record<string, MovementProgress | undefined>,
 ): Availability => {
-  const { equipment, progress, rules } = state
+  const { equipment, rules } = settings
 
   if (movement.requires === 'bar' && !equipment.hasPullupBar) {
     return { available: false, reason: '器具なし' }
@@ -115,12 +162,11 @@ const tierHint = (tier: Tier) => {
 }
 
 function PTDashboard() {
-  const [state, setState] = useState<PTProgressResponse>(DEFAULT_STATE)
+  const [settings, setSettings] = useState<PTSettings>(DEFAULT_SETTINGS)
+  const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
+  const [progress, setProgress] = useState<ProgressState>(() => createDefaultProgressState())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [radarData, setRadarData] = useState<RadarAxis[] | null>(null)
-  const [radarLoading, setRadarLoading] = useState(true)
-  const [radarError, setRadarError] = useState<string | null>(null)
 
   const navigate = useNavigate()
 
@@ -129,11 +175,14 @@ function PTDashboard() {
     try {
       const res = await fetch('/api/pt/load')
       if (!res.ok) throw new Error(await res.text())
-      const data = (await res.json()) as PTProgressResponse
-      setState((current) => ({ ...current, ...data }))
+      const data = (await res.json()) as PTLoadResponse
+      setProfile(data.profile ?? makeDefaultProfile())
+      setProgress(buildProgressState(data.progress))
     } catch (error) {
       console.warn('pt load failed:', (error as Error).message)
-      setState(DEFAULT_STATE)
+      const fallbackProfile = makeDefaultProfile()
+      setProfile(fallbackProfile)
+      setProgress(createDefaultProgressState())
     } finally {
       setLoading(false)
     }
@@ -143,28 +192,11 @@ function PTDashboard() {
     loadState()
   }, [])
 
-  const loadRadar = useCallback(async () => {
-    setRadarLoading(true)
-    setRadarError(null)
-    try {
-      const data = await getProfileRadarData('demo-user', new Date().toISOString().slice(0, 10))
-      setRadarData(data)
-    } catch (error) {
-      setRadarError((error as Error).message)
-    } finally {
-      setRadarLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadRadar()
-  }, [loadRadar])
-
   const updateEquipment = async (key: 'hasPullupBar' | 'hasWallSpace', value: boolean) => {
-    let equipmentSnapshot = state.equipment
-    let rulesSnapshot = state.rules
+    let equipmentSnapshot = settings.equipment
+    let rulesSnapshot = settings.rules
 
-    setState((prev) => {
+    setSettings((prev) => {
       const updatedEquipment = { ...prev.equipment, [key]: value }
       equipmentSnapshot = updatedEquipment
       rulesSnapshot = prev.rules
@@ -191,18 +223,44 @@ function PTDashboard() {
     }
   }
 
+  const progressByRoute = useMemo(
+    () =>
+      MOVEMENTS.reduce<Record<string, MovementProgress | undefined>>((acc, movement) => {
+        const entry = progress.movements.find((item) => item.slug === movement.progressSlug)
+        if (entry) {
+          acc[movement.slug] = entry
+        }
+        return acc
+      }, {}),
+    [progress],
+  )
+
   const availabilityMap = useMemo(
     () =>
       MOVEMENTS.reduce<Record<string, Availability>>((acc, movement) => {
-        acc[movement.slug] = getAvailability(movement, state)
+        acc[movement.slug] = getAvailability(movement, settings, progressByRoute)
         return acc
       }, {}),
-    [state],
+    [progressByRoute, settings],
+  )
+
+  const radarBaseData = useMemo<RadarAxis[]>(
+    () =>
+      MOVEMENTS.map((movement) => {
+        const entry = progressByRoute[movement.slug]
+        return {
+          movementSlug: movement.progressSlug,
+          stepNo: entry?.stepNo ?? 1,
+          tier: entry?.tier ?? 'BEGINNER',
+          score: entry?.score,
+          locked: false,
+        }
+      }),
+    [progressByRoute],
   )
 
   const radarDisplayData = useMemo(() => {
-    if (!radarData) return []
-    return radarData.map((axis) => {
+    return radarBaseData.map((axis) => {
       const routeSlug = RADAR_TO_ROUTE[axis.movementSlug]
       if (!routeSlug) return axis
       const availability = availabilityMap[routeSlug]
@@ -215,7 +273,7 @@ function PTDashboard() {
       }
       return axis
     })
-  }, [availabilityMap, radarData])
+  }, [availabilityMap, radarBaseData])
 
   const handleAxisClick = useCallback(
     (slug: RadarAxis['movementSlug']) => {
@@ -233,6 +291,7 @@ function PTDashboard() {
           <h2>PTダッシュボード</h2>
           <p className="section__hint">解放済みのムーブメントを確認し、詳細画面から記録します。</p>
         </header>
+        <p className="section__hint">現在の表示名: {loading ? '読込中...' : profile.displayName}</p>
       </section>
 
       <section className="section pt-radar-section">
@@ -241,15 +300,8 @@ function PTDashboard() {
           <p className="section__hint">現在の6種目の進捗をRPGスキルツリー風に表示します。</p>
         </header>
         <div className="pt-radar-wrapper">
-          {radarLoading ? (
+          {loading ? (
             <div className="pt-radar__skeleton" aria-label="loading" />
-          ) : radarError ? (
-            <div className="pt-radar__error">
-              <p className="section__hint">レーダーデータの読込に失敗しました。</p>
-              <button type="button" className="secondary-button" onClick={loadRadar}>
-                再試行する
-              </button>
-            </div>
           ) : (
             <PTRadar data={radarDisplayData} onAxisClick={handleAxisClick} />
           )}
@@ -261,7 +313,7 @@ function PTDashboard() {
           <label>
             <input
               type="checkbox"
-              checked={state.equipment.hasPullupBar}
+              checked={settings.equipment.hasPullupBar}
               onChange={(event) => updateEquipment('hasPullupBar', event.target.checked)}
             />
             プルアップバーあり
@@ -269,7 +321,7 @@ function PTDashboard() {
           <label>
             <input
               type="checkbox"
-              checked={state.equipment.hasWallSpace}
+              checked={settings.equipment.hasWallSpace}
               onChange={(event) => updateEquipment('hasWallSpace', event.target.checked)}
             />
             壁スペースあり
@@ -281,7 +333,7 @@ function PTDashboard() {
       <section className="section">
         <div className="pt-grid">
           {MOVEMENTS.map((movement) => {
-            const progress = state.progress[movement.slug]
+            const movementProgress = progressByRoute[movement.slug]
             const availability = availabilityMap[movement.slug]
             const unlocked = availability?.available ?? false
 
@@ -293,12 +345,15 @@ function PTDashboard() {
               >
                 <header className="pt-card__header">
                   <h3>{movement.name}</h3>
-                  <span className="pt-card__step">Step {progress?.step ?? 1}</span>
+                  <span className="pt-card__step">Step {movementProgress?.stepNo ?? 1}</span>
                 </header>
                 <dl className="pt-card__meta">
                   <div>
                     <dt>練習レベル</dt>
-                    <dd>{progress ? TIER_LABEL[progress.tier] : '初級'}（{tierHint(progress?.tier ?? 'BEGINNER')}）</dd>
+                    <dd>
+                      {movementProgress ? TIER_LABEL[movementProgress.tier] : '初級'}（
+                      {tierHint(movementProgress?.tier ?? 'BEGINNER')}）
+                    </dd>
                   </div>
                   <div>
                     <dt>目安レンジ</dt>
