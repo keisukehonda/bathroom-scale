@@ -165,6 +165,7 @@ function PTDashboard() {
   const [settings, setSettings] = useState<PTSettings>(DEFAULT_SETTINGS)
   const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
   const [progress, setProgress] = useState<ProgressState>(() => createDefaultProgressState())
+  const [profileError, setProfileError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -184,6 +185,7 @@ function PTDashboard() {
       const fallbackProfile = makeDefaultProfile()
       setProfile(fallbackProfile)
       setProgress(createDefaultProgressState())
+      setProfileError('PTデータの読み込みに失敗しました。時間をおいて再度お試しください。')
     } finally {
       setLoading(false)
     }
@@ -293,6 +295,7 @@ function PTDashboard() {
           <p className="section__hint">解放済みのムーブメントを確認し、詳細画面から記録します。</p>
         </header>
         <p className="section__hint">現在の表示名: {loading ? '読込中...' : profile.displayName}</p>
+        {profileError && <p className="section__hint pt-dashboard__error">{profileError}</p>}
       </section>
 
       <section className="section pt-radar-section">
