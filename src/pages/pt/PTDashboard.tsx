@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 
 import PTRadar from '../../components/PTRadar'
@@ -6,13 +6,14 @@ import type { RadarAxis } from '../../lib/pt/radar'
 import {
   makeDefaultProfile,
   makeDefaultProgress,
+  normaliseProfile,
   normaliseProgress,
   type MovementProgress,
-  type Profile,
   type Progress as ProgressPayload,
   type PTLoadResponse,
   type Tier,
 } from '../../../lib/schemas/pt'
+import { safeDisplayName, type Profile } from '../../types/pt'
 
 type PTSettings = {
   equipment: {
@@ -165,6 +166,8 @@ function PTDashboard() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  const displayName = useMemo(() => safeDisplayName(profile), [profile])
+
   const navigate = useNavigate()
 
   const loadState = async () => {
@@ -174,7 +177,7 @@ function PTDashboard() {
       const res = await fetch('/api/pt/load')
       if (!res.ok) throw new Error(await res.text())
       const data = (await res.json()) as PTLoadResponse
-      setProfile(data.profile ?? makeDefaultProfile())
+      setProfile(normaliseProfile(data.profile ?? makeDefaultProfile()))
       setProgress(buildProgressState(data.progress))
     } catch (error) {
       console.warn('pt load failed:', (error as Error).message)
@@ -290,7 +293,7 @@ function PTDashboard() {
           <h2>PTダッシュボード</h2>
           <p className="section__hint">解放済みのムーブメントを確認し、詳細画面から記録します。</p>
         </header>
-        <p className="section__hint">現在の表示名: {loading ? '読込中...' : profile.displayName}</p>
+        <p className="section__hint">現在の表示名: {loading ? '読込中...' : displayName}</p>
         {profileError && <p className="section__hint pt-dashboard__error">{profileError}</p>}
       </section>
 
