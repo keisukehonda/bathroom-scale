@@ -161,6 +161,9 @@ const tierHint = (tier: Tier) => {
 function PTDashboard() {
   const [settings, setSettings] = useState<PTSettings>(DEFAULT_SETTINGS)
   const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
+  const [profileDisplayName, setProfileDisplayName] = useState<string>(() =>
+    safeDisplayName(makeDefaultProfile()),
+  )
   const [progress, setProgress] = useState<ProgressState>(() => createDefaultProgressState())
   const [profileError, setProfileError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -170,6 +173,10 @@ function PTDashboard() {
 
   const navigate = useNavigate()
 
+  useEffect(() => {
+    setProfileDisplayName(safeDisplayName(profile))
+  }, [profile])
+
   const loadState = async () => {
     setLoading(true)
     setProfileError(null)
@@ -177,7 +184,8 @@ function PTDashboard() {
       const res = await fetch('/api/pt/load')
       if (!res.ok) throw new Error(await res.text())
       const data = (await res.json()) as PTLoadResponse
-      setProfile(normaliseProfile(data.profile ?? makeDefaultProfile()))
+      const nextProfile = normaliseProfile(data.profile ?? makeDefaultProfile())
+      setProfile(nextProfile)
       setProgress(buildProgressState(data.progress))
     } catch (error) {
       console.warn('pt load failed:', (error as Error).message)
@@ -293,7 +301,7 @@ function PTDashboard() {
           <h2>PTダッシュボード</h2>
           <p className="section__hint">解放済みのムーブメントを確認し、詳細画面から記録します。</p>
         </header>
-        <p className="section__hint">現在の表示名: {loading ? '読込中...' : displayName}</p>
+        <p className="section__hint">現在の表示名: {loading ? '読込中...' : profileDisplayName}</p>
         {profileError && <p className="section__hint pt-dashboard__error">{profileError}</p>}
       </section>
 

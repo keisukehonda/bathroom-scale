@@ -38,9 +38,14 @@ function PTSettings() {
   const [statusMessage, setStatusMessage] = useState('')
   const [generationConfig, setGenerationConfig] = useState<PTGenerationConfig>(DEFAULT_GENERATION_CONFIG)
   const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
-  const [displayNameDraft, setDisplayNameDraft] = useState<string>(() => makeDefaultProfile().displayName)
+  const [profileDisplayName, setProfileDisplayName] = useState<string>(() => safeDisplayName(makeDefaultProfile()))
+  const [displayNameDraft, setDisplayNameDraft] = useState<string>(() => safeDisplayName(makeDefaultProfile()))
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
+
+  useEffect(() => {
+    setProfileDisplayName(safeDisplayName(profile))
+  }, [profile])
 
   useEffect(() => {
     const load = async () => {
@@ -49,8 +54,9 @@ function PTSettings() {
         if (!res.ok) throw new Error(await res.text())
         const data = (await res.json()) as PTLoadSettingsResponse
         const loadedProfile = normaliseProfile(data.profile ?? makeDefaultProfile())
+        const nextDisplayName = safeDisplayName(loadedProfile)
         setProfile(loadedProfile)
-        setDisplayNameDraft(loadedProfile.displayName)
+        setDisplayNameDraft(nextDisplayName)
         setProfileMessage('')
         setSettings({
           hasPullupBar: data.equipment?.hasPullupBar ?? DEFAULT_STATE.hasPullupBar,
@@ -60,8 +66,9 @@ function PTSettings() {
       } catch (error) {
         console.warn('settings load failed:', (error as Error).message)
         const fallbackProfile = makeDefaultProfile()
+        const fallbackDisplayName = safeDisplayName(fallbackProfile)
         setProfile(fallbackProfile)
-        setDisplayNameDraft(fallbackProfile.displayName)
+        setDisplayNameDraft(fallbackDisplayName)
         setProfileMessage('')
       }
       setGenerationConfig(loadGenerationConfig(DEFAULT_USER_ID))
@@ -73,7 +80,7 @@ function PTSettings() {
   const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const trimmed = displayNameDraft.trim()
-    if (!trimmed || trimmed === profile.displayName.trim()) {
+    if (!trimmed || trimmed === profileDisplayName.trim()) {
       return
     }
 
@@ -96,8 +103,9 @@ function PTSettings() {
       const data = (await response.json()) as PTSaveResponse
       if (data.ok && data.profile) {
         const nextProfile = normaliseProfile(data.profile)
+        const nextDisplayName = safeDisplayName(nextProfile)
         setProfile(nextProfile)
-        setDisplayNameDraft(nextProfile.displayName)
+        setDisplayNameDraft(nextDisplayName)
         setProfileMessage('表示名を保存しました')
       } else {
         throw new Error(data.error ?? 'unknown error')
@@ -169,11 +177,15 @@ function PTSettings() {
 
           <div className="form-field">
             <span className="form-field__label">現在の表示名</span>
-            <p>{safeDisplayName(profile)}</p>
+            <p>{profileDisplayName}</p>
             <button
               type="submit"
               className="primary-button"
-              disabled={profileSaving || !displayNameDraft.trim() || displayNameDraft.trim() === profile.displayName.trim()}
+              disabled={
+                profileSaving ||
+                !displayNameDraft.trim() ||
+                displayNameDraft.trim() === profileDisplayName.trim()
+              }
             >
               {profileSaving ? '保存中...' : '表示名を保存'}
             </button>
