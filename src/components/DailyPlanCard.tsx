@@ -15,7 +15,7 @@ import {
   MOVEMENTS,
 } from '../lib/pt/dailyPlan'
 import type { RadarAxis } from '../lib/pt/radar'
-import { getProfileRadarData, toScore } from '../lib/pt/radar'
+import { toScore } from '../lib/pt/radar'
 
 const TIER_DISPLAY: Record<string, string> = {
   BEGINNER: 'Beginner',
@@ -29,17 +29,30 @@ const TAG_DISPLAY: Record<string, string> = {
   rotation: 'ローテ重視',
 }
 
-type PTProgressResponse = {
-  equipment: { hasPullupBar: boolean; hasWallSpace: boolean }
-  progress: Record<string, { step: number; tier: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' }>
-  rules: { bridgeDependsOn: 'any-step5' | 'none' }
+type StoredMovementProgress = {
+  slug: RadarAxis['movementSlug']
+  stepNo: number
+  tier: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
+  score?: number
+  updatedAt: string
+}
+
+type PTLoadResponse = {
+  profile: { displayName: string; updatedAt: string }
+  progress: {
+    movements: StoredMovementProgress[]
+    version?: number
+  }
+  // equipment and rules remain managed separately via settings API
+  equipment?: { hasPullupBar: boolean; hasWallSpace: boolean }
+  rules?: { bridgeDependsOn: 'any-step5' | 'none' }
 }
 
 type LoadedContext = {
   config: PTGenerationConfig
   progress: MovementProgressMap
-  equipment: PTProgressResponse['equipment']
-  rules: PTProgressResponse['rules']
+  equipment: { hasPullupBar: boolean; hasWallSpace: boolean }
+  rules: { bridgeDependsOn: 'any-step5' | 'none' }
   radarScores: RadarScoreMap
 }
 
@@ -66,22 +79,23 @@ const formatDateKey = (date: Date) => date.toISOString().slice(0, 10)
 
 const translateTag = (tag: string) => TAG_DISPLAY[tag] ?? tag
 
-const buildProgressMap = (progress: PTProgressResponse['progress']): MovementProgressMap => {
-  const entries = Object.entries(progress)
-  return entries.reduce<MovementProgressMap>((acc, [key, value]) => {
-    if (['pushup', 'squat', 'pullup', 'leg-raise', 'bridge', 'handstand-pushup'].includes(key)) {
-      acc[key as keyof MovementProgressMap] = value
+const buildProgressMap = (movements: StoredMovementProgress[]): MovementProgressMap => {
+  return movements.reduce<MovementProgressMap>((acc, movement) => {
+    const movementId = RADAR_TO_MOVEMENT[movement.slug]
+    if (movementId) {
+      acc[movementId] = { step: movement.stepNo, tier: movement.tier }
     }
     return acc
   }, {})
 }
 
-const toRadarScores = (axes: RadarAxis[]): RadarScoreMap => {
-  return axes.reduce<RadarScoreMap>((acc, axis) => {
-    const movementId = RADAR_TO_MOVEMENT[axis.movementSlug]
-    if (movementId) {
-      acc[movementId] = axis.locked ? 0 : toScore(axis.stepNo, axis.tier)
-    }
+const buildRadarScores = (movements: StoredMovementProgress[]): RadarScoreMap => {
+  return movements.reduce<RadarScoreMap>((acc, movement) => {
+    const movementId = RADAR_TO_MOVEMENT[movement.slug]
+    if (!movementId) return acc
+    const baseScore = typeof movement.score === 'number' ? movement.score : toScore(movement.stepNo, movement.tier)
+    const clamped = Math.max(0, Math.min(10, Number.isFinite(baseScore) ? baseScore : 0))
+    acc[movementId] = clamped
     return acc
   }, {})
 }
@@ -100,21 +114,16 @@ export default function DailyPlanCard({ userId = DEFAULT_USER_ID }: { userId?: s
       if (!response.ok) {
         throw new Error(await response.text())
       }
-      const data = (await response.json()) as PTProgressResponse
+      const data = (await response.json()) as PTLoadResponse
 
-      let radarScores: RadarScoreMap = {}
-      try {
-        const axes = await getProfileRadarData(userId, today)
-        radarScores = toRadarScores(axes)
-      } catch (error) {
-        console.warn('radar load failed:', (error as Error).message)
-      }
+      const progressMovements = data.progress?.movements ?? []
+      const radarScores = buildRadarScores(progressMovements)
 
       const context: LoadedContext = {
         config,
-        progress: buildProgressMap(data.progress),
-        equipment: data.equipment,
-        rules: data.rules,
+        progress: buildProgressMap(progressMovements),
+        equipment: data.equipment ?? { hasPullupBar: false, hasWallSpace: false },
+        rules: data.rules ?? { bridgeDependsOn: 'any-step5' },
         radarScores,
       }
 

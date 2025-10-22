@@ -8,7 +8,10 @@
     "skipLibCheck": true,
     "noEmit": true,
     "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] },
+    "paths": {
+      "@/*": ["src/*"],
+      "zod": ["vendor/zod"]
+    },
     "resolveJsonModule": true
   },
   "include": ["src", "vite-env.d.ts", "src/global.d.ts"],
