@@ -3,30 +3,19 @@ import { NavLink, useNavigate } from 'react-router-dom'
 
 import PTRadar from '../../components/PTRadar'
 import type { RadarAxis } from '../../lib/pt/radar'
-
-type Tier = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
-
-type Profile = {
-  displayName: string
-  updatedAt: string
-}
-
-type StoredMovementProgress = {
-  slug: RadarAxis['movementSlug']
-  stepNo: number
-  tier: Tier
-  score?: number
-  updatedAt: string
-}
-
-type ProgressPayload = {
-  movements: StoredMovementProgress[]
-  version?: number
-}
+import {
+  makeDefaultProfile,
+  makeDefaultProgress,
+  normaliseProgress,
+  type MovementProgress,
+  type Profile,
+  type Progress as ProgressPayload,
+  type Tier,
+} from '../../../lib/schemas/pt'
 
 type PTLoadResponse = {
-  profile: Profile
-  progress: ProgressPayload
+  profile?: Profile
+  progress?: ProgressPayload
 }
 
 type PTSettings = {
@@ -75,49 +64,46 @@ const DEFAULT_SETTINGS: PTSettings = {
 }
 
 type ProgressState = {
-  movements: StoredMovementProgress[]
+  movements: MovementProgress[]
   version: number
 }
 
-const createDefaultProfile = (): Profile => ({
-  displayName: 'Guest',
-  updatedAt: new Date().toISOString(),
-})
-
 const createDefaultProgressState = (): ProgressState => {
-  const now = new Date().toISOString()
-  return {
-    movements: MOVEMENTS.map((movement) => ({
+  const base: ProgressPayload = makeDefaultProgress()
+  const movements = MOVEMENTS.map((movement) => {
+    const entry = base.movements.find((item: MovementProgress) => item.slug === movement.progressSlug)
+    if (entry) return entry
+    return {
       slug: movement.progressSlug,
       stepNo: 1,
       tier: 'BEGINNER',
       score: 0,
-      updatedAt: now,
-    })),
-    version: 1,
+      updatedAt: new Date().toISOString(),
+    } satisfies MovementProgress
+  })
+  return {
+    movements,
+    version: base.version ?? 1,
   }
 }
 
 const buildProgressState = (payload: ProgressPayload | null | undefined): ProgressState => {
   if (!payload) return createDefaultProgressState()
-  const lookup = new Map(payload.movements.map((movement) => [movement.slug, movement]))
-  const now = new Date().toISOString()
+  const normalised: ProgressPayload = normaliseProgress(payload)
   const movements = MOVEMENTS.map((movement) => {
-    const entry = lookup.get(movement.progressSlug)
-    if (!entry) {
-      return {
-        slug: movement.progressSlug,
-        stepNo: 1,
-        tier: 'BEGINNER' as Tier,
-        score: 0,
-        updatedAt: now,
-      }
-    }
-    return entry
+    const entry = normalised.movements.find((item: MovementProgress) => item.slug === movement.progressSlug)
+    if (entry) return entry
+    return {
+      slug: movement.progressSlug,
+      stepNo: 1,
+      tier: 'BEGINNER',
+      score: 0,
+      updatedAt: new Date().toISOString(),
+    } satisfies MovementProgress
   })
   return {
     movements,
-    version: payload.version ?? 1,
+    version: normalised.version ?? 1,
   }
 }
 
@@ -133,7 +119,7 @@ type Availability = {
 }
 
 const checkBridgeUnlocked = (
-  progress: Record<string, StoredMovementProgress | undefined>,
+  progress: Record<string, MovementProgress | undefined>,
   rule: PTSettings['rules']['bridgeDependsOn'],
 ) => {
   if (rule === 'none') return true
@@ -144,7 +130,7 @@ const checkBridgeUnlocked = (
 const getAvailability = (
   movement: MovementMeta,
   settings: PTSettings,
-  progress: Record<string, StoredMovementProgress | undefined>,
+  progress: Record<string, MovementProgress | undefined>,
 ): Availability => {
   const { equipment, rules } = settings
 
@@ -177,7 +163,7 @@ const tierHint = (tier: Tier) => {
 
 function PTDashboard() {
   const [settings, setSettings] = useState<PTSettings>(DEFAULT_SETTINGS)
-  const [profile, setProfile] = useState<Profile>(() => createDefaultProfile())
+  const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
   const [progress, setProgress] = useState<ProgressState>(() => createDefaultProgressState())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -191,11 +177,11 @@ function PTDashboard() {
       const res = await fetch('/api/pt/load')
       if (!res.ok) throw new Error(await res.text())
       const data = (await res.json()) as PTLoadResponse
-      setProfile(data.profile)
+      setProfile(data.profile ?? makeDefaultProfile())
       setProgress(buildProgressState(data.progress))
     } catch (error) {
       console.warn('pt load failed:', (error as Error).message)
-      const fallbackProfile = createDefaultProfile()
+      const fallbackProfile = makeDefaultProfile()
       setProfile(fallbackProfile)
       setProgress(createDefaultProgressState())
     } finally {
@@ -240,7 +226,7 @@ function PTDashboard() {
 
   const progressByRoute = useMemo(
     () =>
-      MOVEMENTS.reduce<Record<string, StoredMovementProgress | undefined>>((acc, movement) => {
+      MOVEMENTS.reduce<Record<string, MovementProgress | undefined>>((acc, movement) => {
         const entry = progress.movements.find((item) => item.slug === movement.progressSlug)
         if (entry) {
           acc[movement.slug] = entry
@@ -309,34 +295,6 @@ function PTDashboard() {
         <p className="section__hint">現在の表示名: {loading ? '読込中...' : profile.displayName}</p>
       </section>
 
-      <section className="section">
-        <form className="pt-profile-form" onSubmit={handleProfileSubmit}>
-          <label className="pt-profile-form__label" htmlFor="pt-display-name">
-            表示名
-          </label>
-          <div className="pt-profile-form__controls">
-            <input
-              id="pt-display-name"
-              type="text"
-              value={displayNameDraft}
-              maxLength={50}
-              onChange={(event) => setDisplayNameDraft(event.target.value)}
-              disabled={profileSaving}
-            />
-            <button
-              type="submit"
-              className="primary-button"
-              disabled={profileSaving || !displayNameDraft.trim() || displayNameDraft.trim() === profile.displayName.trim()}
-            >
-              保存
-            </button>
-          </div>
-          <p className="section__hint">現在の表示名: {profile.displayName}</p>
-          {profileSaving && <p className="section__hint">保存中...</p>}
-          {profileError && <p className="section__hint pt-profile-form__error">{profileError}</p>}
-        </form>
-      </section>
-
       <section className="section pt-radar-section">
         <header className="section__header">
           <h3>到達度レーダー</h3>
@@ -376,7 +334,7 @@ function PTDashboard() {
       <section className="section">
         <div className="pt-grid">
           {MOVEMENTS.map((movement) => {
-            const progress = progressByRoute[movement.slug]
+            const movementProgress = progressByRoute[movement.slug]
             const availability = availabilityMap[movement.slug]
             const unlocked = availability?.available ?? false
 
@@ -388,12 +346,15 @@ function PTDashboard() {
               >
                 <header className="pt-card__header">
                   <h3>{movement.name}</h3>
-                  <span className="pt-card__step">Step {progress?.stepNo ?? 1}</span>
+                  <span className="pt-card__step">Step {movementProgress?.stepNo ?? 1}</span>
                 </header>
                 <dl className="pt-card__meta">
                   <div>
                     <dt>練習レベル</dt>
-                    <dd>{progress ? TIER_LABEL[progress.tier] : '初級'}（{tierHint(progress?.tier ?? 'BEGINNER')}）</dd>
+                    <dd>
+                      {movementProgress ? TIER_LABEL[movementProgress.tier] : '初級'}（
+                      {tierHint(movementProgress?.tier ?? 'BEGINNER')}）
+                    </dd>
                   </div>
                   <div>
                     <dt>目安レンジ</dt>
