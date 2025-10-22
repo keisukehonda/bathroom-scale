@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+  if (!redis.isEnabled && process.env.NODE_ENV === 'production') {
     res.status(500).json({ error: 'Redis configuration is missing' })
     return
   }
@@ -41,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const progressKey = `pt:user:${userId}:progress`
 
   try {
-    const [profileRaw, progressRaw] = await redis.mget<string | null>(profileKey, progressKey)
+    const [profileRaw, progressRaw] = await redis.mget(profileKey, progressKey)
 
     const profileJSON = parseJSON(profileRaw)
     const parsedProfile = profileJSON ? ProfileSchema.safeParse(profileJSON) : null

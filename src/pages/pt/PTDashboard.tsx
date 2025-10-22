@@ -181,9 +181,6 @@ function PTDashboard() {
   const [progress, setProgress] = useState<ProgressState>(() => createDefaultProgressState())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [profileSaving, setProfileSaving] = useState(false)
-  const [profileError, setProfileError] = useState<string | null>(null)
-  const [displayNameDraft, setDisplayNameDraft] = useState<string>('Guest')
 
   const navigate = useNavigate()
 
@@ -195,13 +192,11 @@ function PTDashboard() {
       if (!res.ok) throw new Error(await res.text())
       const data = (await res.json()) as PTLoadResponse
       setProfile(data.profile)
-      setDisplayNameDraft(data.profile.displayName)
       setProgress(buildProgressState(data.progress))
     } catch (error) {
       console.warn('pt load failed:', (error as Error).message)
       const fallbackProfile = createDefaultProfile()
       setProfile(fallbackProfile)
-      setDisplayNameDraft(fallbackProfile.displayName)
       setProgress(createDefaultProgressState())
     } finally {
       setLoading(false)
@@ -295,38 +290,6 @@ function PTDashboard() {
     })
   }, [availabilityMap, radarBaseData])
 
-  const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const trimmed = displayNameDraft.trim()
-    if (!trimmed || trimmed === profile.displayName.trim()) {
-      return
-    }
-
-    setProfileSaving(true)
-    setProfileError(null)
-    const payload: Profile = {
-      displayName: trimmed,
-      updatedAt: new Date().toISOString(),
-    }
-
-    try {
-      const response = await fetch('/api/pt/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profile: payload }),
-      })
-      if (!response.ok) {
-        throw new Error(await response.text())
-      }
-      setProfile(payload)
-      setDisplayNameDraft(payload.displayName)
-    } catch (error) {
-      setProfileError((error as Error).message)
-    } finally {
-      setProfileSaving(false)
-    }
-  }
-
   const handleAxisClick = useCallback(
     (slug: RadarAxis['movementSlug']) => {
       const routeSlug = RADAR_TO_ROUTE[slug]
@@ -343,6 +306,7 @@ function PTDashboard() {
           <h2>PTダッシュボード</h2>
           <p className="section__hint">解放済みのムーブメントを確認し、詳細画面から記録します。</p>
         </header>
+        <p className="section__hint">現在の表示名: {loading ? '読込中...' : profile.displayName}</p>
       </section>
 
       <section className="section">

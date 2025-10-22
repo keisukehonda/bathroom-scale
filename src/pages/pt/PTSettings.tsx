@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
 import {
@@ -9,8 +9,10 @@ import {
   saveGenerationConfig,
 } from '../../lib/pt/dailyPlan'
 
+type Profile = { displayName: string; updatedAt: string }
+
 type PTLoadResponse = {
-  profile: { displayName: string; updatedAt: string }
+  profile: Profile
   progress: {
     movements: { slug: string; stepNo: number; tier: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'; score?: number; updatedAt: string }[]
     version?: number
@@ -35,11 +37,20 @@ const DEFAULT_STATE: SettingsPayload = {
   },
 }
 
+const createDefaultProfile = (): Profile => ({
+  displayName: 'Guest',
+  updatedAt: new Date().toISOString(),
+})
+
 function PTSettings() {
   const [settings, setSettings] = useState<SettingsPayload>(DEFAULT_STATE)
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [generationConfig, setGenerationConfig] = useState<PTGenerationConfig>(DEFAULT_GENERATION_CONFIG)
+  const [profile, setProfile] = useState<Profile>(() => createDefaultProfile())
+  const [displayNameDraft, setDisplayNameDraft] = useState<string>(() => createDefaultProfile().displayName)
+  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileMessage, setProfileMessage] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -47,6 +58,10 @@ function PTSettings() {
         const res = await fetch('/api/pt/load')
         if (!res.ok) throw new Error(await res.text())
         const data = (await res.json()) as PTLoadResponse
+        const loadedProfile = data.profile ?? createDefaultProfile()
+        setProfile(loadedProfile)
+        setDisplayNameDraft(loadedProfile.displayName)
+        setProfileMessage('')
         setSettings({
           hasPullupBar: data.equipment?.hasPullupBar ?? DEFAULT_STATE.hasPullupBar,
           hasWallSpace: data.equipment?.hasWallSpace ?? DEFAULT_STATE.hasWallSpace,
@@ -54,12 +69,51 @@ function PTSettings() {
         })
       } catch (error) {
         console.warn('settings load failed:', (error as Error).message)
+        const fallbackProfile = createDefaultProfile()
+        setProfile(fallbackProfile)
+        setDisplayNameDraft(fallbackProfile.displayName)
+        setProfileMessage('')
       }
       setGenerationConfig(loadGenerationConfig(DEFAULT_USER_ID))
     }
 
     load()
   }, [])
+
+  const handleProfileSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const trimmed = displayNameDraft.trim()
+    if (!trimmed || trimmed === profile.displayName.trim()) {
+      return
+    }
+
+    setProfileSaving(true)
+    setProfileMessage('')
+    const payload: Profile = {
+      displayName: trimmed,
+      updatedAt: new Date().toISOString(),
+    }
+
+    try {
+      const response = await fetch('/api/pt/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profile: payload }),
+      })
+      if (!response.ok) {
+        throw new Error(await response.text())
+      }
+      setProfile(payload)
+      setDisplayNameDraft(payload.displayName)
+      setProfileMessage('表示名を保存しました')
+    } catch (error) {
+      const message = (error as Error).message
+      setProfileMessage(`表示名の保存に失敗しました: ${message}`)
+      console.warn('profile save failed:', message)
+    } finally {
+      setProfileSaving(false)
+    }
+  }
 
   const updateGenerationConfig = (patch: Partial<PTGenerationConfig>) => {
     setGenerationConfig((prev) => ({ ...prev, ...patch }))
@@ -99,6 +153,37 @@ function PTSettings() {
           <h2>PT設定</h2>
           <p className="section__hint">器具環境と出現条件テンプレートを管理します。</p>
         </header>
+
+        <form className="form-grid" onSubmit={handleProfileSubmit}>
+          <label className="form-field" htmlFor="pt-settings-display-name">
+            <span className="form-field__label">表示名</span>
+            <input
+              id="pt-settings-display-name"
+              type="text"
+              value={displayNameDraft}
+              maxLength={50}
+              onChange={(event) => {
+                if (profileMessage) setProfileMessage('')
+                setDisplayNameDraft(event.target.value)
+              }}
+              disabled={profileSaving}
+            />
+            <span className="section__hint">PTダッシュボードに表示される名前です。</span>
+          </label>
+
+          <div className="form-field">
+            <span className="form-field__label">現在の表示名</span>
+            <p>{profile.displayName}</p>
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={profileSaving || !displayNameDraft.trim() || displayNameDraft.trim() === profile.displayName.trim()}
+            >
+              {profileSaving ? '保存中...' : '表示名を保存'}
+            </button>
+            {profileMessage && <p className="section__hint">{profileMessage}</p>}
+          </div>
+        </form>
 
         <div className="form-grid">
           <label className="form-field form-field--checkbox">
