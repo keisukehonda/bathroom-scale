@@ -10,13 +10,9 @@ import {
   type MovementProgress,
   type Profile,
   type Progress as ProgressPayload,
+  type PTLoadResponse,
   type Tier,
 } from '../../../lib/schemas/pt'
-
-type PTLoadResponse = {
-  profile?: Profile
-  progress?: ProgressPayload
-}
 
 type PTSettings = {
   equipment: {
@@ -83,7 +79,7 @@ const createDefaultProgressState = (): ProgressState => {
   })
   return {
     movements,
-    version: base.version ?? 1,
+    version: base.version,
   }
 }
 
@@ -103,7 +99,7 @@ const buildProgressState = (payload: ProgressPayload | null | undefined): Progre
   })
   return {
     movements,
-    version: normalised.version ?? 1,
+    version: normalised.version,
   }
 }
 

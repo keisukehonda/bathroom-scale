@@ -2,29 +2,15 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 
 import { toScore } from '../../lib/pt/radar'
-
-type Tier = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
-
-type StoredMovementProgress = {
-  slug: 'pushup' | 'squat' | 'pullup' | 'legraise' | 'bridge' | 'hspu'
-  stepNo: number
-  tier: Tier
-  score?: number
-  updatedAt: string
-}
-
-type ProgressPayload = {
-  movements: StoredMovementProgress[]
-  version: number
-}
-
-type PTLoadResponse = {
-  profile: { displayName: string; updatedAt: string }
-  progress: {
-    movements: StoredMovementProgress[]
-    version?: number
-  }
-}
+import {
+  makeDefaultProgress,
+  normaliseProgress,
+  type MovementProgress,
+  type Progress,
+  type PTLoadResponse,
+  type PTSaveResponse,
+  type Tier,
+} from '../../../lib/schemas/pt'
 
 type SetRow = {
   reps: number
@@ -42,7 +28,7 @@ const MOVEMENT_LABELS: Record<string, string> = {
   'handstand-pushup': 'Handstand Pushup',
 }
 
-const ROUTE_TO_PROGRESS_SLUG: Record<string, StoredMovementProgress['slug']> = {
+const ROUTE_TO_PROGRESS_SLUG: Record<string, MovementProgress['slug']> = {
   pushup: 'pushup',
   squat: 'squat',
   'leg-raise': 'legraise',
@@ -66,7 +52,7 @@ function PTMovementDetail() {
   const progressSlug = ROUTE_TO_PROGRESS_SLUG[slug]
 
   const [progress, setProgress] = useState<{ stepNo: number; tier: Tier }>({ stepNo: 1, tier: 'BEGINNER' })
-  const [progressPayload, setProgressPayload] = useState<ProgressPayload>({ movements: [], version: 1 })
+  const [progressPayload, setProgressPayload] = useState<Progress>(() => makeDefaultProgress())
   const [sets, setSets] = useState<SetRow[]>([{ reps: 0 }])
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
@@ -77,8 +63,9 @@ function PTMovementDetail() {
         const res = await fetch('/api/pt/load')
         if (!res.ok) throw new Error(await res.text())
         const data = (await res.json()) as PTLoadResponse
-        const version = data.progress?.version ?? 1
-        const movements = data.progress?.movements ?? []
+        const payload = normaliseProgress(data.progress)
+        const version = payload.version
+        const movements = payload.movements
         const current = progressSlug
           ? movements.find((movement) => movement.slug === progressSlug)
           : undefined
@@ -152,20 +139,16 @@ function PTMovementDetail() {
         }),
       })
       if (!res.ok) throw new Error(await res.text())
-      setProgressPayload((prev) => ({
-        version: prev.version,
-        movements: prev.movements.map((movement) =>
-          movement.slug === progressSlug
-            ? {
-                ...movement,
-                stepNo: progress.stepNo,
-                tier: progress.tier,
-                score: toScore(progress.stepNo, progress.tier),
-                updatedAt: new Date().toISOString(),
-              }
-            : movement,
-        ),
-      }))
+      const data = (await res.json()) as PTSaveResponse
+      if (!data.ok || !data.progress) {
+        throw new Error(data.error ?? 'unknown error')
+      }
+      const nextProgress = normaliseProgress(data.progress)
+      setProgressPayload(nextProgress)
+      const updated = nextProgress.movements.find((movement) => movement.slug === progressSlug)
+      if (updated) {
+        setProgress({ stepNo: updated.stepNo, tier: updated.tier })
+      }
       setStatusMessage('保存しました')
     } catch (error) {
       const message = (error as Error).message

@@ -8,6 +8,7 @@ import {
   makeDefaultProgress,
   normaliseProfile,
   normaliseProgress,
+  type PTLoadResponse,
 } from '../../lib/schemas/pt'
 
 const resolveUserId = (req: VercelRequest) => {
@@ -55,8 +56,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? normaliseProgress(parsedProgress.data)
       : makeDefaultProgress()
 
-    res.status(200).json({ profile, progress })
+    const payload: PTLoadResponse = {
+      profile,
+      progress,
+    }
+
+    res.status(200).json(payload)
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message })
+    console.error('pt/load failed', error)
+    res.status(500).json({ error: 'internal' })
   }
 }
