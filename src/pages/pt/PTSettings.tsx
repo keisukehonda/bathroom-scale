@@ -172,7 +172,7 @@ function PTSettings() {
 
           <div className="form-field">
             <span className="form-field__label">現在の表示名</span>
-            <p>{profile.displayName}</p>
+            <p>{typeof profile === 'object' && profile !== null ? profile.displayName ?? '未設定' : String(profile ?? '')}</p>
             <button
               type="submit"
               className="primary-button"
