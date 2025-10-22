@@ -53,10 +53,17 @@ describe('generateDailyPlan', () => {
       min_rest_days_per_movement: 2,
     }
 
+    const lockedByRule: MovementProgressMap = {
+      ...BASE_PROGRESS,
+      pushup: { step: 4, tier: 'BEGINNER' },
+      squat: { step: 4, tier: 'BEGINNER' },
+      'leg-raise': { step: 4, tier: 'BEGINNER' },
+    }
+
     const plan = generateDailyPlan({
       date,
       config,
-      progress: BASE_PROGRESS,
+      progress: lockedByRule,
       equipment: { hasPullupBar: false, hasWallSpace: true },
       rules: RULES,
       radarScores: SCORES,

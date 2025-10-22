@@ -8,12 +8,8 @@ import {
   loadGenerationConfig,
   saveGenerationConfig,
 } from '../../lib/pt/dailyPlan'
-import {
-  makeDefaultProfile,
-  type Profile,
-  type PTLoadResponse,
-  type PTSaveResponse,
-} from '../../../lib/schemas/pt'
+import { makeDefaultProfile, normaliseProfile, type PTLoadResponse, type PTSaveResponse } from '../../../lib/schemas/pt'
+import { safeDisplayName, type Profile } from '../../types/pt'
 
 type PTLoadSettingsResponse = PTLoadResponse & {
   equipment?: { hasPullupBar: boolean; hasWallSpace: boolean }
@@ -52,7 +48,7 @@ function PTSettings() {
         const res = await fetch('/api/pt/load')
         if (!res.ok) throw new Error(await res.text())
         const data = (await res.json()) as PTLoadSettingsResponse
-        const loadedProfile = data.profile ?? makeDefaultProfile()
+        const loadedProfile = normaliseProfile(data.profile ?? makeDefaultProfile())
         setProfile(loadedProfile)
         setDisplayNameDraft(loadedProfile.displayName)
         setProfileMessage('')
@@ -99,8 +95,9 @@ function PTSettings() {
       }
       const data = (await response.json()) as PTSaveResponse
       if (data.ok && data.profile) {
-        setProfile(data.profile)
-        setDisplayNameDraft(data.profile.displayName)
+        const nextProfile = normaliseProfile(data.profile)
+        setProfile(nextProfile)
+        setDisplayNameDraft(nextProfile.displayName)
         setProfileMessage('表示名を保存しました')
       } else {
         throw new Error(data.error ?? 'unknown error')
@@ -172,7 +169,7 @@ function PTSettings() {
 
           <div className="form-field">
             <span className="form-field__label">現在の表示名</span>
-            <p>{typeof profile === 'object' && profile !== null ? profile.displayName ?? '未設定' : String(profile ?? '')}</p>
+            <p>{safeDisplayName(profile)}</p>
             <button
               type="submit"
               className="primary-button"
