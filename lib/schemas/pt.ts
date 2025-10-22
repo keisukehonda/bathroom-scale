@@ -62,8 +62,10 @@ export type PTSaveResponse = {
 
 export const MOVEMENT_SLUGS: MovementSlug[] = ['pushup', 'squat', 'pullup', 'legraise', 'bridge', 'hspu']
 
+export const PROFILE_FALLBACK_DISPLAY_NAME = 'Guest'
+
 export const makeDefaultProfile = (): Profile => ({
-  displayName: 'Guest',
+  displayName: PROFILE_FALLBACK_DISPLAY_NAME,
   updatedAt: new Date().toISOString(),
 })
 
@@ -107,7 +109,18 @@ export const normaliseProgress = (input: Progress): Progress => {
   }
 }
 
-export const normaliseProfile = (input: Profile): Profile => ({
-  displayName: input.displayName.trim(),
-  updatedAt: input.updatedAt,
-})
+export const normaliseProfile = (input: Profile | Partial<Profile>): Profile => {
+  const displayName =
+    typeof input.displayName === 'string' ? input.displayName.trim() : PROFILE_FALLBACK_DISPLAY_NAME
+  const resolvedDisplayName = displayName.length > 0 ? displayName : PROFILE_FALLBACK_DISPLAY_NAME
+
+  const updatedAt =
+    typeof input.updatedAt === 'string' && input.updatedAt.trim().length > 0
+      ? input.updatedAt
+      : new Date().toISOString()
+
+  return {
+    displayName: resolvedDisplayName,
+    updatedAt,
+  }
+}
