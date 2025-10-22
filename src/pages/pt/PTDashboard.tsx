@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 
 import PTRadar from '../../components/PTRadar'
@@ -186,6 +186,7 @@ function PTDashboard() {
 
   const loadState = async () => {
     setLoading(true)
+    setProfileError(null)
     try {
       const res = await fetch('/api/pt/load')
       if (!res.ok) throw new Error(await res.text())
@@ -306,6 +307,34 @@ function PTDashboard() {
           <p className="section__hint">解放済みのムーブメントを確認し、詳細画面から記録します。</p>
         </header>
         <p className="section__hint">現在の表示名: {loading ? '読込中...' : profile.displayName}</p>
+      </section>
+
+      <section className="section">
+        <form className="pt-profile-form" onSubmit={handleProfileSubmit}>
+          <label className="pt-profile-form__label" htmlFor="pt-display-name">
+            表示名
+          </label>
+          <div className="pt-profile-form__controls">
+            <input
+              id="pt-display-name"
+              type="text"
+              value={displayNameDraft}
+              maxLength={50}
+              onChange={(event) => setDisplayNameDraft(event.target.value)}
+              disabled={profileSaving}
+            />
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={profileSaving || !displayNameDraft.trim() || displayNameDraft.trim() === profile.displayName.trim()}
+            >
+              保存
+            </button>
+          </div>
+          <p className="section__hint">現在の表示名: {profile.displayName}</p>
+          {profileSaving && <p className="section__hint">保存中...</p>}
+          {profileError && <p className="section__hint pt-profile-form__error">{profileError}</p>}
+        </form>
       </section>
 
       <section className="section pt-radar-section">
