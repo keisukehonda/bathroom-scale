@@ -45,13 +45,20 @@ const parseBody = (req: PTRequest) => {
   return req.body
 }
 
-const parseJSON = <T>(value: string | null | undefined): T | null => {
-  if (!value) return null
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return null
+const parseJSON = <T>(value: unknown): T | null => {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    if (!value) return null
+    try {
+      return JSON.parse(value) as T
+    } catch {
+      return null
+    }
   }
+  if (typeof value === 'object' || typeof value === 'number' || typeof value === 'boolean') {
+    return value as T
+  }
+  return null
 }
 
 export default async function handler(req: PTRequest, res: ServerResponse) {

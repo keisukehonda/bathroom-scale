@@ -35,13 +35,20 @@ const resolveUserId = (req: PTRequest) => {
   return DEFAULT_USER_ID
 }
 
-const parseJSON = <T>(value: string | null | undefined): T | null => {
-  if (!value) return null
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return null
+const parseJSON = <T>(value: unknown): T | null => {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    if (!value) return null
+    try {
+      return JSON.parse(value) as T
+    } catch {
+      return null
+    }
   }
+  if (typeof value === 'object' || typeof value === 'number' || typeof value === 'boolean') {
+    return value as T
+  }
+  return null
 }
 
 export default async function handler(req: PTRequest, res: ServerResponse) {
@@ -63,7 +70,7 @@ export default async function handler(req: PTRequest, res: ServerResponse) {
   const progressKey = `pt:user:${userId}:progress`
 
   try {
-    const stored = await redis.get<string | null>(progressKey)
+    const stored = await redis.get(progressKey)
     const json = parseJSON(stored)
     const parsed = json ? ProgressSchema.safeParse(json) : null
     const progress = parsed?.success ? normaliseProgress(parsed.data) : makeDefaultProgress()

@@ -69,7 +69,11 @@ describe('pt save handler', () => {
     expect(saveRes.statusCode).toBe(200)
     const storedRaw = await redis.get(profileKey)
     expect(storedRaw).not.toBeNull()
-    expect(JSON.parse(storedRaw as string)).toMatchObject({ displayName: 'Alice' })
+    if (storedRaw === null) {
+      throw new Error('expected profile to be stored')
+    }
+    const storedProfile = typeof storedRaw === 'string' ? JSON.parse(storedRaw) : storedRaw
+    expect(storedProfile).toMatchObject({ displayName: 'Alice' })
 
     const loadReq = { method: 'GET', url: '/api/pt/load' } as unknown
     const loadRes = createResponse()
