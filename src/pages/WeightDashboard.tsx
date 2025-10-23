@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import DailyPlanCard from '../components/DailyPlanCard'
 import WeightChart from '../components/WeightChart'
 
@@ -10,6 +10,7 @@ type WeightRecord = {
 
 const BASE_WEIGHT = 99.6
 const ITEMS_PER_PAGE = 10
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 const getDifference = (weight: string | number) => {
   const num = typeof weight === 'number' ? weight : parseFloat(String(weight))
@@ -28,33 +29,39 @@ function WeightDashboard() {
   const [weight, setWeight] = useState('')
   const [page, setPage] = useState(1)
 
-  const fetchRecords = async () => {
+  type RawRecord = {
+    date?: unknown
+    weight?: unknown
+  }
+
+  const fetchRecords = useCallback(async () => {
     try {
       const res = await fetch('/api/load')
       if (!res.ok) throw new Error(await res.text())
-      const data = (await res.json()) as any[]
+      const data = (await res.json()) as unknown
 
       // サニタイズ：date は文字列、weight は数値 or 数値文字列に限定
       const sanitized: WeightRecord[] = (Array.isArray(data) ? data : [])
-        .map((r) => {
-          const d = typeof r?.date === 'string' ? r.date : ''
+        .map((entry) => {
+          const record = entry as RawRecord
+          const d = typeof record?.date === 'string' ? record.date : ''
           const w: string | number =
-            typeof r?.weight === 'number' || typeof r?.weight === 'string'
-              ? r.weight
-              : String(r?.weight ?? '') // ここで string に正規化
+            typeof record?.weight === 'number' || typeof record?.weight === 'string'
+              ? record.weight
+              : String(record?.weight ?? '') // ここで string に正規化
           return { date: d, weight: w }
-      })
-        .filter((r) => r.date) // 日付不正は除外
+        })
+        .filter((r) => DATE_PATTERN.test(r.date)) // yyyy-mm-dd 形式以外は除外
 
       setRecords(sortRecords(sanitized))
     } catch (error) {
       console.error('load failed:', (error as Error).message)
     }
-  }
+  }, [setRecords])
 
   useEffect(() => {
     fetchRecords()
-  }, [])
+  }, [fetchRecords])
 
   const addRecord = async () => {
     if (!date || !weight) return
