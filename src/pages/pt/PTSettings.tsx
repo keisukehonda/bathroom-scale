@@ -3,7 +3,6 @@ import { NavLink } from 'react-router-dom'
 
 import {
   DEFAULT_GENERATION_CONFIG,
-  DEFAULT_USER_ID,
   type PTGenerationConfig,
   loadGenerationConfig,
   saveGenerationConfig,
@@ -11,6 +10,8 @@ import {
 import { loadOrDefaultProfile, loadStoredProfile, saveStoredProfile } from '../../lib/pt/profileStorage'
 import { makeDefaultProfile, normaliseProfile, type PTLoadResponse, type PTSaveResponse } from '../../../lib/schemas/pt'
 import { safeDisplayName, type Profile } from '../../types/pt'
+import { DEFAULT_USER_ID } from '../../lib/pt/user'
+import { api } from '../../lib/api'
 
 type PTLoadSettingsResponse = PTLoadResponse & {
   equipment?: { hasPullupBar: boolean; hasWallSpace: boolean }
@@ -52,7 +53,7 @@ function PTSettings() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch('/api/pt/load')
+        const res = await fetch(api('/api/pt/load'))
         if (!res.ok) throw new Error(await res.text())
         const data = (await res.json()) as PTLoadSettingsResponse
         const loadedProfile = normaliseProfile(data.profile ?? makeDefaultProfile())
@@ -91,7 +92,7 @@ function PTSettings() {
     setProfileSaving(true)
     setProfileMessage('')
     try {
-      const response = await fetch('/api/pt/save', {
+      const response = await fetch(api('/api/pt/save'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -133,7 +134,7 @@ function PTSettings() {
     setStatusMessage('')
     try {
       saveGenerationConfig(DEFAULT_USER_ID, generationConfig)
-      const res = await fetch('/api/pt/settings/save', {
+      const res = await fetch(api('/api/pt/settings/save'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(settings),

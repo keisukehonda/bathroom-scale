@@ -13,9 +13,10 @@ import {
   type PTLoadResponse,
   type Tier,
 } from '../../../lib/schemas/pt'
-import { DEFAULT_USER_ID } from '../../lib/pt/dailyPlan'
+import { DEFAULT_USER_ID } from '../../lib/pt/user'
 import { loadOrDefaultProfile, loadStoredProfile, saveStoredProfile } from '../../lib/pt/profileStorage'
 import { safeDisplayName, type Profile } from '../../types/pt'
+import { api } from '../../lib/api'
 
 type PTSettings = {
   equipment: {
@@ -182,7 +183,7 @@ function PTDashboard() {
     setLoading(true)
     setProfileError(null)
     try {
-      const res = await fetch('/api/pt/load')
+      const res = await fetch(api('/api/pt/load'))
       if (!res.ok) throw new Error(await res.text())
       const data = (await res.json()) as PTLoadResponse
       const nextProfile = normaliseProfile(data.profile ?? makeDefaultProfile())
@@ -221,7 +222,7 @@ function PTDashboard() {
 
     setSaving(true)
     try {
-      await fetch('/api/pt/settings/save', {
+      await fetch(api('/api/pt/settings/save'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { NavLink, useNavigate, useParams } from 'react-router-dom'
 
 import { toScore } from '../../lib/pt/radar'
+import { api } from '../../lib/api'
 import {
   makeDefaultProgress,
   normaliseProgress,
@@ -60,7 +61,7 @@ function PTMovementDetail() {
   useEffect(() => {
     const load = async () => {
       try {
-        const res = await fetch('/api/pt/load')
+        const res = await fetch(api('/api/pt/load'))
         if (!res.ok) throw new Error(await res.text())
         const data = (await res.json()) as PTLoadResponse
         const payload = normaliseProgress(data.progress)
@@ -118,7 +119,7 @@ function PTMovementDetail() {
     setSaving(true)
     setStatusMessage('')
     try {
-      const res = await fetch('/api/pt/save', {
+      const res = await fetch(api('/api/pt/save'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

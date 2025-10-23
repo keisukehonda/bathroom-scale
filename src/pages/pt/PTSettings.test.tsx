@@ -2,7 +2,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PropsWithChildren, AnchorHTMLAttributes } from 'react'
 
-import { DEFAULT_USER_ID } from '../../lib/pt/dailyPlan'
+import { api } from '../../lib/api'
+import { DEFAULT_USER_ID } from '../../lib/pt/user'
 import { saveStoredProfile } from '../../lib/pt/profileStorage'
 
 vi.mock('react-router-dom', async () => {
@@ -32,8 +33,9 @@ describe('PTSettings', () => {
   })
 
   it('shows the profile display name returned by the API', async () => {
+    const loadUrl = api('/api/pt/load')
     const mockFetch = vi.fn((input: RequestInfo | URL) => {
-      if (input === '/api/pt/load') {
+      if (input === loadUrl) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -52,8 +54,9 @@ describe('PTSettings', () => {
   })
 
   it('falls back to Guest when the profile is malformed', async () => {
+    const loadUrl = api('/api/pt/load')
     const mockFetch = vi.fn((input: RequestInfo | URL) => {
-      if (input === '/api/pt/load') {
+      if (input === loadUrl) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -72,8 +75,10 @@ describe('PTSettings', () => {
   })
 
   it('updates the current display name after a successful save', async () => {
+    const loadUrl = api('/api/pt/load')
+    const saveUrl = api('/api/pt/save')
     const mockFetch = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      if (input === '/api/pt/load') {
+      if (input === loadUrl) {
         return Promise.resolve({
           ok: true,
           json: async () => ({
@@ -82,7 +87,7 @@ describe('PTSettings', () => {
           }),
         } as Response)
       }
-      if (input === '/api/pt/save') {
+      if (input === saveUrl) {
         const body = init?.body ? JSON.parse(init.body as string) : null
         if (!body || typeof body !== 'object') throw new Error('missing payload')
         return Promise.resolve({
@@ -119,8 +124,9 @@ describe('PTSettings', () => {
       updatedAt: '2024-03-01T00:00:00.000Z',
     })
 
+    const loadUrl = api('/api/pt/load')
     const mockFetch = vi.fn((input: RequestInfo | URL) => {
-      if (input === '/api/pt/load') {
+      if (input === loadUrl) {
         return Promise.resolve({
           ok: false,
           text: async () => 'failed',

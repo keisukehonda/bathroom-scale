@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 
 import {
-  DEFAULT_USER_ID,
   type PTGenerationConfig,
   type RadarScoreMap,
   type MovementProgressMap,
@@ -14,6 +13,8 @@ import {
   MOVEMENT_LOOKUP,
   MOVEMENTS,
 } from '../lib/pt/dailyPlan'
+import { DEFAULT_USER_ID } from '../lib/pt/user'
+import { api } from '../lib/api'
 import type { RadarAxis } from '../lib/pt/radar'
 import { toScore } from '../lib/pt/radar'
 import { makeDefaultProgress, normaliseProgress, type MovementProgress, type PTLoadResponse } from '../../lib/schemas/pt'
@@ -100,7 +101,7 @@ export default function DailyPlanCard({ userId = DEFAULT_USER_ID }: { userId?: s
     setState({ status: 'loading' })
     try {
       const config = loadGenerationConfig(userId)
-      const response = await fetch('/api/pt/load')
+      const response = await fetch(api('/api/pt/load'))
       if (!response.ok) {
         throw new Error(await response.text())
       }

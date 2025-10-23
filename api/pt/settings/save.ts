@@ -1,4 +1,6 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+import type { IncomingMessage, ServerResponse } from 'http'
+
+import { DEFAULT_USER_ID } from '../../../src/lib/pt/user'
 
 type SettingsPayload = {
   hasPullupBar?: boolean
@@ -8,21 +10,52 @@ type SettingsPayload = {
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+type SettingsRequest = IncomingMessage & {
+  body?: unknown
+  query?: Record<string, unknown>
+}
+
+const getUserId = (req: SettingsRequest) => {
+  if (req.url) {
+    try {
+      const url = new URL(req.url, 'http://localhost')
+      const searchId = url.searchParams.get('userId')?.trim()
+      if (searchId) return searchId
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  const queryId = typeof req.query?.userId === 'string' ? req.query.userId.trim() : ''
+  if (queryId) return queryId
+  return DEFAULT_USER_ID
+}
+
+export default async function handler(req: SettingsRequest, res: ServerResponse) {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method Not Allowed' })
+    res.statusCode = 405
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Method Not Allowed' }))
     return
   }
 
   try {
     const payload: SettingsPayload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body
     if (!payload) {
-      res.status(400).json({ error: 'Invalid payload' })
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'Invalid payload' }))
       return
     }
 
-    res.status(200).json({ ok: true })
+    const userId = getUserId(req)
+
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: true, userId }))
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message })
+    res.statusCode = 500
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: (error as Error).message }))
   }
 }

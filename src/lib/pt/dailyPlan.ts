@@ -465,7 +465,6 @@ export type DailyPlanContext = {
   radarScores: RadarScoreMap
 }
 
-export const DEFAULT_USER_ID = 'demo-user'
 
 export const MOVEMENTS = DEFAULT_MOVEMENTS
 
