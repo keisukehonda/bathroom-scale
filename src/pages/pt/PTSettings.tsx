@@ -8,6 +8,7 @@ import {
   loadGenerationConfig,
   saveGenerationConfig,
 } from '../../lib/pt/dailyPlan'
+import { loadOrDefaultProfile, loadStoredProfile, saveStoredProfile } from '../../lib/pt/profileStorage'
 import { makeDefaultProfile, normaliseProfile, type PTLoadResponse, type PTSaveResponse } from '../../../lib/schemas/pt'
 import { safeDisplayName, type Profile } from '../../types/pt'
 
@@ -37,9 +38,10 @@ function PTSettings() {
   const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState('')
   const [generationConfig, setGenerationConfig] = useState<PTGenerationConfig>(DEFAULT_GENERATION_CONFIG)
-  const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
-  const [profileDisplayName, setProfileDisplayName] = useState<string>(() => safeDisplayName(makeDefaultProfile()))
-  const [displayNameDraft, setDisplayNameDraft] = useState<string>(() => safeDisplayName(makeDefaultProfile()))
+  const [profile, setProfile] = useState<Profile>(() => loadOrDefaultProfile(DEFAULT_USER_ID))
+  const initialDisplayName = safeDisplayName(profile)
+  const [profileDisplayName, setProfileDisplayName] = useState<string>(initialDisplayName)
+  const [displayNameDraft, setDisplayNameDraft] = useState<string>(initialDisplayName)
   const [profileSaving, setProfileSaving] = useState(false)
   const [profileMessage, setProfileMessage] = useState('')
 
@@ -58,6 +60,7 @@ function PTSettings() {
         setProfile(loadedProfile)
         setDisplayNameDraft(nextDisplayName)
         setProfileMessage('')
+        saveStoredProfile(DEFAULT_USER_ID, loadedProfile)
         setSettings({
           hasPullupBar: data.equipment?.hasPullupBar ?? DEFAULT_STATE.hasPullupBar,
           hasWallSpace: data.equipment?.hasWallSpace ?? DEFAULT_STATE.hasWallSpace,
@@ -65,7 +68,8 @@ function PTSettings() {
         })
       } catch (error) {
         console.warn('settings load failed:', (error as Error).message)
-        const fallbackProfile = makeDefaultProfile()
+        const storedProfile = loadStoredProfile(DEFAULT_USER_ID)
+        const fallbackProfile = storedProfile ?? makeDefaultProfile()
         const fallbackDisplayName = safeDisplayName(fallbackProfile)
         setProfile(fallbackProfile)
         setDisplayNameDraft(fallbackDisplayName)
@@ -106,6 +110,7 @@ function PTSettings() {
         const nextDisplayName = safeDisplayName(nextProfile)
         setProfile(nextProfile)
         setDisplayNameDraft(nextDisplayName)
+        saveStoredProfile(DEFAULT_USER_ID, nextProfile)
         setProfileMessage('表示名を保存しました')
       } else {
         throw new Error(data.error ?? 'unknown error')
