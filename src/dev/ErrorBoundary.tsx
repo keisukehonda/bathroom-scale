@@ -1,17 +1,30 @@
 // src/dev/ErrorBoundary.tsx
-import React from 'react';
-export default class ErrorBoundary extends React.Component<{children: React.ReactNode},{error?:Error,info?:React.ErrorInfo}>{
-  state: {error?:Error,info?:React.ErrorInfo} = {};
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+
+type Props = { children: ReactNode };
+type State = { error: Error | null; info: ErrorInfo | null };
+
+export default class ErrorBoundary extends Component<Props, State> {
+  state: State = { error: null, info: null };
+
+  override componentDidCatch(error: Error, info: ErrorInfo) {
+    // 直上の自作コンポーネントが分かる
     console.error('🛑 ErrorBoundary:', error);
     console.error('🧱 Component stack:', info.componentStack);
     this.setState({ error, info });
   }
-  render() {
+
+  override render() {
     if (this.state.error) {
-      return <pre style={{whiteSpace:'pre-wrap',color:'crimson',padding:12}}>
-{String(this.state.error)}{"\n"}{this.state.info?.componentStack}
-</pre>;
+      return (
+        <pre style={{ whiteSpace: 'pre-wrap', color: 'crimson', padding: 12, background: '#fff5f5' }}>
+{`App crashed:
+${String(this.state.error)}
+---
+Component stack:
+${this.state.info?.componentStack ?? ''}`}
+        </pre>
+      );
     }
     return this.props.children;
   }
