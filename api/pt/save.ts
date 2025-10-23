@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+import type { IncomingMessage, ServerResponse } from 'http'
 
 import redis from './redis'
 import {
@@ -11,14 +11,30 @@ import {
   normaliseProgress,
   type PTSaveResponse,
 } from '../../lib/schemas/pt'
+import { DEFAULT_USER_ID } from '../../src/lib/pt/user'
 
-const resolveUserId = (req: VercelRequest) => {
-  const queryId = typeof req.query.userId === 'string' ? req.query.userId.trim() : ''
-  if (queryId) return queryId
-  return 'demo-user'
+type PTRequest = IncomingMessage & {
+  body?: unknown
+  query?: Record<string, unknown>
 }
 
-const parseBody = (req: VercelRequest) => {
+const resolveUserId = (req: PTRequest) => {
+  if (req.url) {
+    try {
+      const url = new URL(req.url, 'http://localhost')
+      const searchId = url.searchParams.get('userId')?.trim()
+      if (searchId) return searchId
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  const queryId = typeof req.query?.userId === 'string' ? req.query.userId.trim() : ''
+  if (queryId) return queryId
+  return DEFAULT_USER_ID
+}
+
+const parseBody = (req: PTRequest) => {
   if (typeof req.body === 'string') {
     try {
       return JSON.parse(req.body)
@@ -38,14 +54,18 @@ const parseJSON = <T>(value: string | null | undefined): T | null => {
   }
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: PTRequest, res: ServerResponse) {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method Not Allowed' })
+    res.statusCode = 405
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: false, error: 'Method Not Allowed' }))
     return
   }
 
   if (!redis.isEnabled && process.env.NODE_ENV === 'production') {
-    res.status(500).json({ error: 'Redis configuration is missing' })
+    res.statusCode = 500
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: false, error: 'Redis configuration is missing' }))
     return
   }
 
@@ -55,19 +75,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const body = parseBody(req)
   if (!body || typeof body !== 'object') {
-    res.status(400).json({ ok: false, error: 'Invalid payload' })
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: false, error: 'Invalid payload' }))
     return
   }
 
   const parsed = SavePayloadSchema.safeParse(body)
   if (!parsed.success) {
-    res.status(400).json({ ok: false, error: 'Validation failed', issues: parsed.error.issues })
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: false, error: 'Validation failed', issues: parsed.error.issues }))
     return
   }
 
   const { profile, progress } = parsed.data
   if (!profile && !progress) {
-    res.status(400).json({ ok: false, error: 'Nothing to save' })
+    res.statusCode = 400
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: false, error: 'Nothing to save' }))
     return
   }
 
@@ -112,9 +138,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       progress: nextProgress,
     }
 
-    res.status(200).json(payload)
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(payload))
   } catch (error) {
     console.error('pt/save failed', error)
-    res.status(500).json({ ok: false, error: 'internal' })
+    res.statusCode = 500
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ ok: false, error: 'internal' }))
   }
 }
