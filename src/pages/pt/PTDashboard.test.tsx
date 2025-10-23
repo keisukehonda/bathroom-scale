@@ -2,6 +2,9 @@ import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnchorHTMLAttributes, PropsWithChildren } from 'react'
 
+import { DEFAULT_USER_ID } from '../../lib/pt/dailyPlan'
+import { saveStoredProfile } from '../../lib/pt/profileStorage'
+
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
   return {
@@ -21,6 +24,7 @@ const renderDashboard = () => render(<PTDashboard />)
 describe('PTDashboard', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    window.localStorage.clear()
   })
 
   afterEach(() => {
@@ -57,5 +61,22 @@ describe('PTDashboard', () => {
     renderDashboard()
 
     expect(await screen.findByText('現在の表示名: Guest')).toBeInTheDocument()
+  })
+
+  it('restores the stored display name when the API request fails', async () => {
+    saveStoredProfile(DEFAULT_USER_ID, {
+      displayName: 'Stored User',
+      updatedAt: '2024-03-01T00:00:00.000Z',
+    })
+
+    const mockFetch = vi.fn().mockResolvedValue({
+      ok: false,
+      text: async () => 'failed',
+    } as Response)
+    vi.stubGlobal('fetch', mockFetch)
+
+    renderDashboard()
+
+    expect(await screen.findByText('現在の表示名: Stored User')).toBeInTheDocument()
   })
 })
