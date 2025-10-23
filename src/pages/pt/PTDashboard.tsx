@@ -13,6 +13,8 @@ import {
   type PTLoadResponse,
   type Tier,
 } from '../../../lib/schemas/pt'
+import { DEFAULT_USER_ID } from '../../lib/pt/dailyPlan'
+import { loadOrDefaultProfile, loadStoredProfile, saveStoredProfile } from '../../lib/pt/profileStorage'
 import { safeDisplayName, type Profile } from '../../types/pt'
 
 type PTSettings = {
@@ -160,10 +162,9 @@ const tierHint = (tier: Tier) => {
 
 function PTDashboard() {
   const [settings, setSettings] = useState<PTSettings>(DEFAULT_SETTINGS)
-  const [profile, setProfile] = useState<Profile>(() => makeDefaultProfile())
-  const [profileDisplayName, setProfileDisplayName] = useState<string>(() =>
-    safeDisplayName(makeDefaultProfile()),
-  )
+  const [profile, setProfile] = useState<Profile>(() => loadOrDefaultProfile(DEFAULT_USER_ID))
+  const initialDisplayName = safeDisplayName(profile)
+  const [profileDisplayName, setProfileDisplayName] = useState<string>(initialDisplayName)
   const [progress, setProgress] = useState<ProgressState>(() => createDefaultProgressState())
   const [profileError, setProfileError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -186,10 +187,12 @@ function PTDashboard() {
       const data = (await res.json()) as PTLoadResponse
       const nextProfile = normaliseProfile(data.profile ?? makeDefaultProfile())
       setProfile(nextProfile)
+      saveStoredProfile(DEFAULT_USER_ID, nextProfile)
       setProgress(buildProgressState(data.progress))
     } catch (error) {
       console.warn('pt load failed:', (error as Error).message)
-      const fallbackProfile = makeDefaultProfile()
+      const storedProfile = loadStoredProfile(DEFAULT_USER_ID)
+      const fallbackProfile = storedProfile ?? makeDefaultProfile()
       setProfile(fallbackProfile)
       setProgress(createDefaultProgressState())
       setProfileError('PTデータの読み込みに失敗しました。時間をおいて再度お試しください。')
