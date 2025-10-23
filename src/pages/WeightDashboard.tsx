@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import DailyPlanCard from '../components/DailyPlanCard'
 import WeightChart from '../components/WeightChart'
 
+
 type WeightRecord = {
   date: string
-  // サーバからの混入対策：数値/文字列以外も一旦受け取り、描画時に安全化
-  weight: string | number | unknown
+  weight: string | number
 }
 
 const BASE_WEIGHT = 99.6
@@ -38,12 +38,12 @@ function WeightDashboard() {
       const sanitized: WeightRecord[] = (Array.isArray(data) ? data : [])
         .map((r) => {
           const d = typeof r?.date === 'string' ? r.date : ''
-          const w =
+          const w: string | number =
             typeof r?.weight === 'number' || typeof r?.weight === 'string'
               ? r.weight
-              : JSON.stringify(r?.weight ?? '') // オブジェクト等は安全に文字列化
+              : String(r?.weight ?? '') // ここで string に正規化
           return { date: d, weight: w }
-        })
+      })
         .filter((r) => r.date) // 日付不正は除外
 
       setRecords(sortRecords(sanitized))
