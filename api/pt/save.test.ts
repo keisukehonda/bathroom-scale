@@ -1,29 +1,46 @@
 import { describe, expect, it, beforeEach } from 'vitest'
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+import type { ServerResponse } from 'http'
 
 import saveHandler from './save'
 import loadHandler from './load'
 import redis from './redis'
 import { makeDefaultProfile, makeDefaultProgress } from '../../lib/schemas/pt'
+import { DEFAULT_USER_ID } from '../../src/lib/pt/user'
 
-const DEFAULT_USER_ID = 'demo-user'
 const profileKey = `pt:user:${DEFAULT_USER_ID}:profile`
 const progressKey = `pt:user:${DEFAULT_USER_ID}:progress`
 
-type MockResponse = Partial<VercelResponse> & {
+type MockResponse = Partial<ServerResponse> & {
   statusCode: number
+  headers: Record<string, string>
   payload: unknown
 }
 
 const createResponse = (): MockResponse => ({
   statusCode: 0,
+  headers: {},
   payload: undefined,
-  status(code: number) {
-    this.statusCode = code
+  setHeader(name: string, value: string) {
+    this.headers[name.toLowerCase()] = value
     return this
   },
-  json(body: unknown) {
-    this.payload = body
+  end(chunk?: unknown) {
+    if (typeof chunk === 'string') {
+      try {
+        this.payload = JSON.parse(chunk)
+      } catch {
+        this.payload = chunk
+      }
+    } else if (Buffer.isBuffer(chunk)) {
+      const text = chunk.toString('utf8')
+      try {
+        this.payload = JSON.parse(text)
+      } catch {
+        this.payload = text
+      }
+    } else {
+      this.payload = chunk
+    }
     return this
   },
 })
@@ -37,27 +54,31 @@ describe('pt save handler', () => {
   it('persists the profile to redis and returns it on load', async () => {
     const saveReq = {
       method: 'POST',
-      query: {},
+      url: '/api/pt/save',
       body: JSON.stringify({
         profile: {
           displayName: 'Alice',
           updatedAt: '2024-01-01T00:00:00.000Z',
         },
       }),
-    } as unknown as VercelRequest
+    } as unknown
     const saveRes = createResponse()
 
-    await saveHandler(saveReq, saveRes as unknown as VercelResponse)
+    await saveHandler(saveReq as never, saveRes as never)
 
     expect(saveRes.statusCode).toBe(200)
     const storedRaw = await redis.get(profileKey)
     expect(storedRaw).not.toBeNull()
-    expect(JSON.parse(storedRaw as string)).toMatchObject({ displayName: 'Alice' })
+    if (storedRaw === null) {
+      throw new Error('expected profile to be stored')
+    }
+    const storedProfile = typeof storedRaw === 'string' ? JSON.parse(storedRaw) : storedRaw
+    expect(storedProfile).toMatchObject({ displayName: 'Alice' })
 
-    const loadReq = { method: 'GET', query: {} } as unknown as VercelRequest
+    const loadReq = { method: 'GET', url: '/api/pt/load' } as unknown
     const loadRes = createResponse()
 
-    await loadHandler(loadReq, loadRes as unknown as VercelResponse)
+    await loadHandler(loadReq as never, loadRes as never)
 
     expect(loadRes.statusCode).toBe(200)
     const payload = loadRes.payload as { profile: { displayName: string } }

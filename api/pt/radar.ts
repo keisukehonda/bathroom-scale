@@ -1,7 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+import type { IncomingMessage, ServerResponse } from 'http'
 
 import redis from './redis'
 import { ProgressSchema, makeDefaultProgress, normaliseProgress } from '../../lib/schemas/pt'
+import { DEFAULT_USER_ID } from '../../src/lib/pt/user'
 
 export type RadarTier = 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED'
 
@@ -14,29 +15,54 @@ export type RadarAxis = {
   lockReason?: string
 }
 
-const resolveUserId = (req: VercelRequest) => {
-  const queryId = typeof req.query.userId === 'string' ? req.query.userId.trim() : ''
-  if (queryId) return queryId
-  return 'demo-user'
+type PTRequest = IncomingMessage & {
+  query?: Record<string, unknown>
 }
 
-const parseJSON = <T>(value: string | null | undefined): T | null => {
-  if (!value) return null
-  try {
-    return JSON.parse(value) as T
-  } catch {
-    return null
+const resolveUserId = (req: PTRequest) => {
+  if (req.url) {
+    try {
+      const url = new URL(req.url, 'http://localhost')
+      const searchId = url.searchParams.get('userId')?.trim()
+      if (searchId) return searchId
+    } catch {
+      // ignore parse errors
+    }
   }
+
+  const queryId = typeof req.query?.userId === 'string' ? req.query.userId.trim() : ''
+  if (queryId) return queryId
+  return DEFAULT_USER_ID
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+const parseJSON = <T>(value: unknown): T | null => {
+  if (value == null) return null
+  if (typeof value === 'string') {
+    if (!value) return null
+    try {
+      return JSON.parse(value) as T
+    } catch {
+      return null
+    }
+  }
+  if (typeof value === 'object' || typeof value === 'number' || typeof value === 'boolean') {
+    return value as T
+  }
+  return null
+}
+
+export default async function handler(req: PTRequest, res: ServerResponse) {
   if (req.method && req.method !== 'GET') {
-    res.status(405).json({ error: 'Method Not Allowed' })
+    res.statusCode = 405
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Method Not Allowed' }))
     return
   }
 
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    res.status(500).json({ error: 'Redis configuration is missing' })
+    res.statusCode = 500
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: 'Redis configuration is missing' }))
     return
   }
 
@@ -44,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const progressKey = `pt:user:${userId}:progress`
 
   try {
-    const stored = await redis.get<string | null>(progressKey)
+    const stored = await redis.get(progressKey)
     const json = parseJSON(stored)
     const parsed = json ? ProgressSchema.safeParse(json) : null
     const progress = parsed?.success ? normaliseProgress(parsed.data) : makeDefaultProgress()
@@ -57,8 +83,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       locked: false,
     }))
 
-    res.status(200).json(axes)
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(axes))
   } catch (error) {
-    res.status(500).json({ error: (error as Error).message })
+    res.statusCode = 500
+    res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify({ error: (error as Error).message }))
   }
 }

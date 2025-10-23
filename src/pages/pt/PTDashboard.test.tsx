@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AnchorHTMLAttributes, PropsWithChildren } from 'react'
 
-import { DEFAULT_USER_ID } from '../../lib/pt/dailyPlan'
+import { api } from '../../lib/api'
+import { DEFAULT_USER_ID } from '../../lib/pt/user'
 import { saveStoredProfile } from '../../lib/pt/profileStorage'
 
 vi.mock('react-router-dom', async () => {
@@ -45,7 +46,7 @@ describe('PTDashboard', () => {
     renderDashboard()
 
     expect(await screen.findByText('現在の表示名: Alice')).toBeInTheDocument()
-    expect(mockFetch).toHaveBeenCalledWith('/api/pt/load')
+    expect(mockFetch).toHaveBeenCalledWith(api('/api/pt/load'))
   })
 
   it('falls back to a safe display name when the API response is malformed', async () => {
